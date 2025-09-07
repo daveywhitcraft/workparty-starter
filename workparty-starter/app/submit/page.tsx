@@ -6,30 +6,6 @@ const ALLOWED_MIME = ['video/mp4']; // MP4 only
 
 type Stage = 'idle' | 'signing' | 'uploading' | 'confirming' | 'done' | 'error';
 
-// Read whatever the backend returns and normalize it
-function getSignedInfo(resp: any) {
-  if (!resp || typeof resp !== 'object') return null;
-
-  // Our current backend (Supabase signed upload)
-  if (resp.uploadUrl && resp.token && resp.path) {
-    return { uploadUrl: resp.uploadUrl, token: resp.token, path: resp.path };
-  }
-
-  // Older shapes (fallbacks) — if you ever switch routes
-  if (resp.url && resp.path) return { uploadUrl: resp.url, token: resp.token || '', path: resp.path };
-  if (resp.signedUrl && resp.path) return { uploadUrl: resp.signedUrl, token: resp.token || '', path: resp.path };
-  if (resp.data) {
-    const d = resp.data;
-    if (d.uploadUrl && d.token && (resp.path || d.path)) {
-      return { uploadUrl: d.uploadUrl, token: d.token, path: resp.path || d.path };
-    }
-    if (d.url && (resp.path || d.path)) {
-      return { uploadUrl: d.url, token: d.token || '', path: resp.path || d.path };
-    }
-  }
-  return null;
-}
-
 export default function SubmitPage() {
   const [title, setTitle] = useState('');
   const [artistName, setArtistName] = useState('');
@@ -69,7 +45,7 @@ export default function SubmitPage() {
     }
 
     try {
-      // 1) Ask our backend for a signed upload URL
+      // 1) Ask backend for signed upload URL
       setStage('signing');
       const signResp = await fetch('/api/signed-upload', {
         method: 'POST',
@@ -81,36 +57,28 @@ export default function SubmitPage() {
         }),
       });
 
-      const signJson = await signResp.json().catch(() => ({} as any));
-      if (!signResp.ok) {
+      const signJson = await signResp.json();
+      if (!signResp.ok || !signJson.uploadUrl || !signJson.path) {
         setStage('error');
         setMessage(signJson?.error || 'Could not get upload URL');
         return;
       }
 
-      const signed = getSignedInfo(signJson);
-      if (!signed?.uploadUrl || !signed?.path) {
-        setStage('error');
-        setMessage('Signed URL missing');
-        return;
-      }
-
-      // 2) Upload the file (multipart/form-data with token if provided)
+      // 2) Upload file with PUT directly
       setStage('uploading');
-      const form = new FormData();
-      form.append('file', file);
-      if (signed.token) form.append('token', signed.token);
-      form.append('contentType', file.type);
-      form.append('cacheControl', '3600');
+      const putResp = await fetch(signJson.uploadUrl, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
 
-      const putResp = await fetch(signed.uploadUrl, { method: 'POST', body: form });
       if (!putResp.ok) {
         setStage('error');
         setMessage('Upload failed');
         return;
       }
 
-      // 3) Save the metadata record
+      // 3) Save metadata
       setStage('confirming');
       const confirmResp = await fetch('/api/confirm-upload', {
         method: 'POST',
@@ -121,9 +89,10 @@ export default function SubmitPage() {
           city,
           year: Number(year),
           runtime,
-          file_path: signed.path,
+          file_path: signJson.path,
         }),
       });
+
       if (!confirmResp.ok) {
         setStage('error');
         setMessage('Save failed');
@@ -132,8 +101,6 @@ export default function SubmitPage() {
 
       setStage('done');
       setMessage('Submitted. Thank you.');
-
-      // reset
       setTitle('');
       setArtistName('');
       setCity('');
