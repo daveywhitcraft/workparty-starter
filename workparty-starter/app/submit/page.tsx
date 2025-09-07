@@ -20,22 +20,15 @@ function pickSigned(resp: any) {
 }
 
 export default function SubmitPage() {
-  const [file, setFile] = useState<File | null>(null);
-  const [stage, setStage] = useState<Stage>('idle');
-  const [message, setMessage] = useState('');
-
-  // Metadata fields
   const [title, setTitle] = useState('');
   const [artistName, setArtistName] = useState('');
   const [city, setCity] = useState('');
-  const [country, setCountry] = useState('');
   const [year, setYear] = useState<number | ''>('');
-  const [email, setEmail] = useState('');
   const [runtime, setRuntime] = useState('');
-  const [description, setDescription] = useState('');
-  const [link, setLink] = useState('');
-  const [instagram, setInstagram] = useState('');
-  const [agree, setAgree] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+
+  const [stage, setStage] = useState<Stage>('idle');
+  const [message, setMessage] = useState('');
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] || null;
@@ -60,8 +53,8 @@ export default function SubmitPage() {
     e.preventDefault();
     setMessage('');
 
-    if (!title || !artistName || !city || !year || !email || !file || !agree) {
-      setMessage('Please fill all required fields and agree to terms.');
+    if (!title || !artistName || !city || !year || !runtime || !file) {
+      setMessage('Please fill all fields and choose a valid file.');
       return;
     }
 
@@ -98,119 +91,9 @@ export default function SubmitPage() {
           title,
           artist_name: artistName,
           city,
-          country,
           year: Number(year),
-          email,
           runtime,
-          description,
-          link,
-          instagram,
           file_path: picked.path,
         }),
       });
       if (!confirmResp.ok) throw new Error('Save failed');
-
-      setStage('done');
-      setMessage('Submitted. Thank you.');
-
-      // Reset form
-      setTitle('');
-      setArtistName('');
-      setCity('');
-      setCountry('');
-      setYear('');
-      setEmail('');
-      setRuntime('');
-      setDescription('');
-      setLink('');
-      setInstagram('');
-      (document.getElementById('file-input') as HTMLInputElement).value = '';
-      setFile(null);
-      setAgree(false);
-    } catch (err: any) {
-      setStage('error');
-      setMessage(err?.message || 'Submission problem.');
-    }
-  }
-
-  return (
-    <section className="p-6 max-w-2xl">
-      <h1 className="title mb-4">Submit your video</h1>
-
-      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <b>Rules</b>
-        <ul style={{ marginTop: 8, lineHeight: 1.5 }}>
-          <li>Allowed type: <b>MP4</b></li>
-          <li>Maximum size: <b>{MAX_SIZE_MB} MB</b></li>
-        </ul>
-      </div>
-
-      <form onSubmit={onSubmit} className="flex-col" style={{ gap: 12 }}>
-        <label>Title *</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
-
-        <label>Artist name *</label>
-        <input value={artistName} onChange={(e) => setArtistName(e.target.value)} />
-
-        <label>City *</label>
-        <input value={city} onChange={(e) => setCity(e.target.value)} />
-
-        <label>Country</label>
-        <input value={country} onChange={(e) => setCountry(e.target.value)} />
-
-        <label>Year *</label>
-        <input
-          type="number"
-          value={year}
-          onChange={(e) => setYear(e.target.value === '' ? '' : Number(e.target.value))}
-        />
-
-        <label>Email *</label>
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-
-        <label>Runtime</label>
-        <input value={runtime} onChange={(e) => setRuntime(e.target.value)} />
-
-        <label>Description</label>
-        <textarea value={description} onChange={(e) => setDescription(e.target.value)} />
-
-        <label>Link (Vimeo, website, etc.)</label>
-        <input value={link} onChange={(e) => setLink(e.target.value)} />
-
-        <label>Instagram</label>
-        <input value={instagram} onChange={(e) => setInstagram(e.target.value)} />
-
-        <label>Video file (MP4, max {MAX_SIZE_MB} MB) *</label>
-        <input
-          id="file-input"
-          type="file"
-          accept=".mp4,video/mp4"
-          onChange={onFileChange}
-        />
-
-        <div style={{ marginTop: 8 }}>
-          <label>
-            <input
-              type="checkbox"
-              checked={agree}
-              onChange={(e) => setAgree(e.target.checked)}
-            />{' '}
-            I agree that my submission may be screened and archived.
-          </label>
-        </div>
-
-        <button
-          className="btn"
-          type="submit"
-          disabled={stage === 'signing' || stage === 'uploading' || stage === 'confirming'}
-        >
-          {stage === 'signing' ? 'Preparing…' :
-           stage === 'uploading' ? 'Uploading…' :
-           stage === 'confirming' ? 'Saving…' : 'Submit'}
-        </button>
-      </form>
-
-      {message ? <p className="muted" style={{ marginTop: 12 }}>{message}</p> : null}
-    </section>
-  );
-}
