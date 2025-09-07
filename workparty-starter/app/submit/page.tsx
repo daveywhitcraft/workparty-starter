@@ -6,15 +6,26 @@ const ALLOWED_MIME = ['video/mp4']; // MP4 only
 
 type Stage = 'idle' | 'signing' | 'uploading' | 'confirming' | 'done' | 'error';
 
-function pickSigned(resp: any) {
-  if (resp?.url && resp?.path) return { url: resp.url, path: resp.path };
-  if (resp?.signedUrl && resp?.path) return { url: resp.signedUrl, path: resp.path };
-  if (resp?.uploadUrl && resp?.objectPath) return { url: resp.uploadUrl, path: resp.objectPath };
-  if (resp?.data) {
+// Read whatever the backend returns and normalize it
+function getSignedInfo(resp: any) {
+  if (!resp || typeof resp !== 'object') return null;
+
+  // Our current backend (Supabase signed upload)
+  if (resp.uploadUrl && resp.token && resp.path) {
+    return { uploadUrl: resp.uploadUrl, token: resp.token, path: resp.path };
+  }
+
+  // Older shapes (fallbacks) — if you ever switch routes
+  if (resp.url && resp.path) return { uploadUrl: resp.url, token: resp.token || '', path: resp.path };
+  if (resp.signedUrl && resp.path) return { uploadUrl: resp.signedUrl, token: resp.token || '', path: resp.path };
+  if (resp.data) {
     const d = resp.data;
-    if (d.url && d.path) return { url: d.url, path: d.path };
-    if (d.signedUrl && d.path) return { url: d.signedUrl, path: d.path };
-    if (d.uploadUrl && d.objectPath) return { url: d.uploadUrl, path: d.objectPath };
+    if (d.uploadUrl && d.token && (resp.path || d.path)) {
+      return { uploadUrl: d.uploadUrl, token: d.token, path: resp.path || d.path };
+    }
+    if (d.url && (resp.path || d.path)) {
+      return { uploadUrl: d.url, token: d.token || '', path: resp.path || d.path };
+    }
   }
   return null;
 }
@@ -34,7 +45,6 @@ export default function SubmitPage() {
     const f = e.target.files?.[0] || null;
     setMessage('');
     setFile(null);
-
     if (!f) return;
 
     if (!ALLOWED_MIME.includes(f.type)) {
@@ -59,6 +69,7 @@ export default function SubmitPage() {
     }
 
     try {
+      // 1) Ask our backend for a signed upload URL
       setStage('signing');
       const signResp = await fetch('/api/signed-upload', {
         method: 'POST',
@@ -69,20 +80,37 @@ export default function SubmitPage() {
           size: file.size,
         }),
       });
+
       const signJson = await signResp.json().catch(() => ({} as any));
-      if (!signResp.ok) throw new Error('Could not get upload URL');
+      if (!signResp.ok) {
+        setStage('error');
+        setMessage(signJson?.error || 'Could not get upload URL');
+        return;
+      }
 
-      const picked = pickSigned(signJson);
-      if (!picked?.url || !picked?.path) throw new Error('Signed URL missing');
+      const signed = getSignedInfo(signJson);
+      if (!signed?.uploadUrl || !signed?.path) {
+        setStage('error');
+        setMessage('Signed URL missing');
+        return;
+      }
 
+      // 2) Upload the file (multipart/form-data with token if provided)
       setStage('uploading');
-      const putResp = await fetch(picked.url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
-      if (!putResp.ok) throw new Error('Upload failed');
+      const form = new FormData();
+      form.append('file', file);
+      if (signed.token) form.append('token', signed.token);
+      form.append('contentType', file.type);
+      form.append('cacheControl', '3600');
 
+      const putResp = await fetch(signed.uploadUrl, { method: 'POST', body: form });
+      if (!putResp.ok) {
+        setStage('error');
+        setMessage('Upload failed');
+        return;
+      }
+
+      // 3) Save the metadata record
       setStage('confirming');
       const confirmResp = await fetch('/api/confirm-upload', {
         method: 'POST',
@@ -93,15 +121,19 @@ export default function SubmitPage() {
           city,
           year: Number(year),
           runtime,
-          file_path: picked.path,
+          file_path: signed.path,
         }),
       });
-      if (!confirmResp.ok) throw new Error('Save failed');
+      if (!confirmResp.ok) {
+        setStage('error');
+        setMessage('Save failed');
+        return;
+      }
 
       setStage('done');
       setMessage('Submitted. Thank you.');
 
-      // Reset form
+      // reset
       setTitle('');
       setArtistName('');
       setCity('');
@@ -109,9 +141,9 @@ export default function SubmitPage() {
       setRuntime('');
       (document.getElementById('file-input') as HTMLInputElement).value = '';
       setFile(null);
-    } catch (err: any) {
+    } catch {
       setStage('error');
-      setMessage(err?.message || 'Submission problem.');
+      setMessage('Submission problem.');
     }
   }
 
