@@ -19,10 +19,7 @@ export default function AdminPage() {
 
   async function load() {
     const resp = await fetch('/api/list-all', { headers: { 'x-admin': pass } });
-    if (!resp.ok) {
-      setStatus('Could not load items');
-      return;
-    }
+    if (!resp.ok) { setStatus('Could not load items'); return; }
     const json = await resp.json();
     setRows(Array.isArray(json.rows) ? json.rows : []);
   }
@@ -51,10 +48,7 @@ export default function AdminPage() {
       },
       body: JSON.stringify({ id, ...body }),
     });
-    if (!resp.ok) {
-      setStatus('Save issue');
-      return;
-    }
+    if (!resp.ok) { setStatus('Save issue'); return; }
     setStatus('Saved');
     load();
   }
@@ -76,31 +70,25 @@ export default function AdminPage() {
       ) : (
         <>
           <p className="muted" style={{ margin: '12px 0' }}>
-            Showing active items. Archived items are hidden.
+            Showing active items. Archived items stay hidden.
           </p>
+
           <div className="grid">
             {rows
               .filter((r: any) => r.status !== 'archived')
               .map((r: any) => (
                 <div className="card" key={r.id}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <b>{r.title}</b>
-                    <span className="muted">{r.artist_name}</span>
+                    <b>{r.title}</b><span className="muted">{r.artist_name}</span>
                   </div>
-                  <p className="muted">
-                    {r.city} · {r.year}
-                  </p>
+                  <p className="muted">{r.city} · {r.year}</p>
+
                   <div className="row" style={{ gap: 8 }}>
-                    <button className="btn" onClick={() => setRow(r.id, { status: 'approved' })}>
-                      Approve
-                    </button>
-                    <button className="btn" onClick={() => setRow(r.id, { status: 'rejected' })}>
-                      Reject
-                    </button>
-                    <button className="btn" onClick={() => setRow(r.id, { status: 'archived' })}>
-                      Archive
-                    </button>
+                    <button className="btn" onClick={() => setRow(r.id, { status: 'approved' })}>Approve</button>
+                    <button className="btn" onClick={() => setRow(r.id, { status: 'rejected' })}>Reject</button>
+                    <button className="btn" onClick={() => setRow(r.id, { status: 'archived' })}>Archive</button>
                   </div>
+
                   <div className="row" style={{ marginTop: 8, gap: 8 }}>
                     <label>Order</label>
                     <input
@@ -109,6 +97,7 @@ export default function AdminPage() {
                       onBlur={(e) => setRow(r.id, { order_index: Number(e.target.value) })}
                     />
                   </div>
+
                   <div style={{ marginTop: 8 }}>
                     <video controls preload="metadata" style={{ width: '100%' }} playsInline>
                       <source
