@@ -1,3 +1,5 @@
+export const runtime = "nodejs"; // ensure server runtime on Vercel
+
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
@@ -7,15 +9,14 @@ type Submission = {
   created_at: string;
   title?: string | null;
   description?: string | null;
-  file_path?: string | null;      // e.g. "artist123/myvideo.mp4"
-  storage_bucket?: string | null; // e.g. "videos"
+  file_path?: string | null;
+  storage_bucket?: string | null;
   status?: string | null;
 };
 
 export default async function AdminPage() {
   const authed = cookies().get("wp_admin_auth")?.value === "1";
 
-  // ---- server-side login using your ADMIN_PASS (no client envs) ----
   async function login(formData: FormData) {
     "use server";
     const pwd = String(formData.get("password") || "");
@@ -37,29 +38,33 @@ export default async function AdminPage() {
     redirect("/admin");
   }
 
-  // ---- show login form if not authed ----
   if (!authed) {
     return (
-      <div style={{ padding: "2rem", maxWidth: 520 }}>
+      <div style={{ padding: 24, maxWidth: 520 }}>
         <h1>Admin Login</h1>
         <form action={login} style={{ display: "flex", gap: 8 }}>
           <input
             type="password"
             name="password"
             placeholder="Enter password"
-            style={{ padding: "0.6rem 0.8rem", flex: 1 }}
+            style={{ padding: "10px 12px", flex: 1 }}
             required
           />
-          <button type="submit" style={{ padding: "0.6rem 0.9rem" }}>Login</button>
+          <button type="submit" style={{ padding: "10px 12px" }}>Login</button>
         </form>
       </div>
     );
   }
 
-  // ---- fetch submissions on the server (uses your Supabase envs) ----
+  // --- DATA FETCH ---
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const supabaseSrv = process.env.SUPABASE_SERVICE_ROLE || ""; // server-only key
-  const supabase = createClient(supabaseUrl, supabaseSrv);
+  const srvKey = process.env.SUPABASE_SERVICE_ROLE || ""; // server-only key
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
+
+  // prefer service role; fall back to anon if missing
+  const supabase = createClient(supabaseUrl, srvKey || anonKey, {
+    auth: { persistSession: false },
+  });
 
   const { data, error } = await supabase
     .from("submissions")
@@ -70,10 +75,19 @@ export default async function AdminPage() {
   const publicBase = `${supabaseUrl}/storage/v1/object/public`;
 
   return (
-    <div style={{ padding: "2rem", maxWidth: 900 }}>
+    <div style={{ padding: 24, maxWidth: 980 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
         <h1>Admin</h1>
         <form action={logout}><button type="submit" style={{ fontSize: 14 }}>Log out</button></form>
+      </div>
+
+      {/* --- SIMPLE DIAGNOSTICS (visible on page to kill the guesswork) --- */}
+      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
+        <div>Supabase URL set: {supabaseUrl ? "yes" : "no"}</div>
+        <div>Service role present: {srvKey ? "yes" : "no"}</div>
+        <div>Anon key present: {anonKey ? "yes" : "no"}</div>
+        <div>Query error: {error ? error.message : "none"}</div>
+        <div>Found submissions: {rows.length}</div>
       </div>
 
       {error ? (
@@ -109,4 +123,14 @@ export default async function AdminPage() {
 
                 {fileUrl ? (
                   <div style={{ marginTop: 12 }}>
-                    <video controls preload="metadata" style={{ maxWidth: "100%", borderRadius: 6 }} src={fileUrl}
+                    <video controls preload="metadata" style={{ maxWidth: "100%", borderRadius: 6 }} src={fileUrl} />
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
