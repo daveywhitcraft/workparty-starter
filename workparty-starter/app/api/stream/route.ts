@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const BUCKET = 'uploads'; // change if your bucket name differs
+const BUCKET = 'videos'; // <- your bucket
 
 function guessMime(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase();
@@ -32,7 +32,6 @@ export async function GET(req: NextRequest) {
     }
 
     const range = req.headers.get('range') ?? undefined;
-
     const upstream = await fetch(data.signedUrl, {
       headers: range ? { Range: range } : undefined,
     });
