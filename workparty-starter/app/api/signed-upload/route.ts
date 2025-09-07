@@ -1,16 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Must exist in Vercel → Project → Settings → Environment Variables
-// NEXT_PUBLIC_SUPABASE_URL
-// SUPABASE_SERVICE_ROLE_KEY   (service role key, not anon)
+// accept either SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SERVICE_ROLE
+const SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || // last-resort fallback
+  '';
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  SERVICE_KEY
 );
 
-const BUCKET = 'videos'; // <- your only bucket
+const BUCKET = 'videos'; // your bucket
 const MAX_SIZE_BYTES = 250 * 1024 * 1024; // 250 MB
 
 export async function POST(req: NextRequest) {
@@ -29,7 +32,6 @@ export async function POST(req: NextRequest) {
 
     const objectPath = `${Date.now()}-${filename}`;
 
-    // Create a signed *upload* URL (multipart/form-data POST with token)
     const { data, error } = await supabase.storage
       .from(BUCKET)
       .createSignedUploadUrl(objectPath);
@@ -39,9 +41,9 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      uploadUrl: data.signedUrl, // POST form-data here
+      uploadUrl: data.signedUrl, // POST multipart/form-data here
       token: data.token,         // include in form-data
-      path: objectPath,          // save this; used later to play the file
+      path: objectPath,          // save this for playback later
     });
   } catch {
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
