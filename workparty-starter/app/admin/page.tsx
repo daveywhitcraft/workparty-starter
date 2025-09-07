@@ -15,15 +15,13 @@ type Submission = {
   status?: string | null;
 };
 
-type Props = {
-  searchParams?: { status?: string };
-};
+type Props = { searchParams?: { status?: string } };
 
 export default async function AdminPage({ searchParams }: Props) {
   const authed = cookies().get("wp_admin_auth")?.value === "1";
   const activeStatus = (searchParams?.status || "all").toLowerCase();
 
-  // ---------- Auth (server-side) ----------
+  // --- Auth using your ADMIN_PASS (no new files) ---
   async function login(formData: FormData) {
     "use server";
     const pwd = String(formData.get("password") || "");
@@ -50,47 +48,35 @@ export default async function AdminPage({ searchParams }: Props) {
       <div style={{ padding: 24, maxWidth: 520 }}>
         <h1>Admin Login</h1>
         <form action={login} style={{ display: "flex", gap: 8 }}>
-          <input
-            type="password"
-            name="password"
-            placeholder="Enter password"
-            style={{ padding: "10px 12px", flex: 1 }}
-            required
-          />
+          <input name="password" type="password" placeholder="Enter password" style={{ padding: 10, flex: 1 }} required />
           <button type="submit" style={{ padding: "10px 12px" }}>Login</button>
         </form>
       </div>
     );
   }
 
-  // ---------- Supabase client (server) ----------
+  // --- Supabase (server) ---
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const srvKey = process.env.SUPABASE_SERVICE_ROLE || "";
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
   const supabase = createClient(supabaseUrl, srvKey || anonKey, { auth: { persistSession: false } });
   const publicBase = `${supabaseUrl}/storage/v1/object/public`;
 
-  // ---------- Actions ----------
+  // --- Status actions ---
   async function setStatus(formData: FormData) {
     "use server";
     const id = String(formData.get("id") || "");
     const status = String(formData.get("status") || "");
-    const sb = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-      process.env.SUPABASE_SERVICE_ROLE || "",
-      { auth: { persistSession: false } }
-    );
-    if (id && status) {
-      await sb.from("submissions").update({ status }).eq("id", id);
-    }
+    const sb = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL || "", process.env.SUPABASE_SERVICE_ROLE || "", {
+      auth: { persistSession: false },
+    });
+    if (id && status) await sb.from("submissions").update({ status }).eq("id", id);
     redirect(`/admin?status=${encodeURIComponent(activeStatus)}`);
   }
 
-  // ---------- Query ----------
+  // --- Query with optional filter ---
   let query = supabase.from("submissions").select("*").order("created_at", { ascending: false });
-  if (["pending", "approved", "archived"].includes(activeStatus)) {
-    query = query.eq("status", activeStatus);
-  }
+  if (["pending", "approved", "archived"].includes(activeStatus)) query = query.eq("status", activeStatus);
   const { data, error } = await query;
   const rows = (data as Submission[]) || [];
 
@@ -104,14 +90,7 @@ export default async function AdminPage({ searchParams }: Props) {
       {/* Filters */}
       <nav style={{ marginTop: 12, display: "flex", gap: 12, fontSize: 14 }}>
         {["all", "pending", "approved", "archived"].map((s) => (
-          <Link
-            key={s}
-            href={`/admin?status=${s}`}
-            style={{
-              textDecoration: activeStatus === s ? "underline" : "none",
-              opacity: activeStatus === s ? 1 : 0.8,
-            }}
-          >
+          <Link key={s} href={`/admin?status=${s}`} style={{ textDecoration: activeStatus === s ? "underline" : "none" }}>
             {s[0].toUpperCase() + s.slice(1)}
           </Link>
         ))}
@@ -127,6 +106,8 @@ export default async function AdminPage({ searchParams }: Props) {
             const bucket = s.storage_bucket || "videos";
             const path = s.file_path || "";
             const fileUrl = path ? `${publicBase}/${bucket}/${path}` : null;
+            const lower = (path || "").toLowerCase();
+            const playable = lower.endsWith(".mp4") || lower.endsWith(".webm"); // reliable inline preview types
 
             return (
               <li key={s.id} style={{ border: "1px solid #343434", borderRadius: 8, padding: 12 }}>
@@ -137,11 +118,11 @@ export default async function AdminPage({ searchParams }: Props) {
                       {new Date(s.created_at).toLocaleString()}
                       {s.status ? ` · ${s.status}` : ""}
                     </div>
-                    {s.description ? (
-                      <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{s.description}</p>
-                    ) : null}
+                    {s.description ? <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{s.description}</p> : null}
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
+
+                  {/* Status buttons */}
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                     <form action={setStatus}>
                       <input type="hidden" name="id" value={s.id} />
                       <input type="hidden" name="status" value="approved" />
@@ -160,9 +141,16 @@ export default async function AdminPage({ searchParams }: Props) {
                   </div>
                 </div>
 
+                {/* Preview */}
                 {fileUrl ? (
                   <div style={{ marginTop: 12 }}>
-                    <video controls preload="metadata" style={{ maxWidth: "100%", borderRadius: 6 }} src={fileUrl} />
+                    {playable ? (
+                      <video controls preload="metadata" style={{ maxWidth: "100%", borderRadius: 6 }} src={fileUrl} />
+                    ) : (
+                      <p style={{ fontSize: 12, opacity: 0.75 }}>
+                        Preview available for MP4/WebM. Use “Open file” to view this format.
+                      </p>
+                    )}
                     <div style={{ marginTop: 6 }}>
                       <a href={fileUrl} target="_blank" rel="noreferrer">Open file</a>
                     </div>
