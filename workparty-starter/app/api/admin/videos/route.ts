@@ -1,22 +1,64 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// Pick up your existing Vercel env names
+const serviceKey =
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  "";
+
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !serviceKey) {
+  throw new Error("Missing Supabase env vars");
+}
+
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  serviceKey
 );
 
-export async function GET() {
+async function listAll(prefix = ""): Promise<string[]> {
   const { data, error } = await supabase.storage
     .from("submissions")
-    .list("", { limit: 1000 });
+    .list(prefix, { limit: 1000 });
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) throw error;
 
-  const paths = data?.map((f) => f.name) || [];
-  const { data: signed } = await supabase.storage
-    .from("submissions")
-    .createSignedUrls(paths, 3600);
+  const out: string[] = [];
+  for (const item of data || []) {
+    // files have metadata, folders don’t
+    // @ts-ignore
+    if (item.metadata?.mimetype) {
+      out.push(`${prefix}${item.name}`);
+    } else {
+      out.push(...(await listAll(`${prefix}${item.name}/`)));
+    }
+  }
+  return out;
+}
 
-  return NextResponse.json({ items: signed });
+export async function GET() {
+  try {
+    const paths = await listAll("");
+    if (!paths.length) {
+      return NextResponse.json({ items: [] });
+    }
+
+    const { data: signed, error } = await supabase.storage
+      .from("submissions")
+      .createSignedUrls(paths, 3600);
+
+    if (error) throw error;
+
+    return NextResponse.json({
+      items: (signed || []).map((s, i) => ({
+        path: paths[i],
+        signedUrl: s.signedUrl,
+      })),
+    });
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: e.message || "list failed" },
+      { status: 500 }
+    );
+  }
 }
