@@ -1,10 +1,25 @@
 'use client';
 import { useState } from 'react';
 
-const MAX_SIZE_MB = 2000; // 2 GB
-const ALLOWED_MIME = ['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm'];
+const MAX_SIZE_MB = 1500; // ~1.5 GB hard cap
+const ALLOWED_MIME = ['video/mp4']; // MP4 only for reliable web playback
 
 type Stage = 'idle' | 'signing' | 'uploading' | 'confirming' | 'done' | 'error';
+
+// accept several possible response shapes from /api/signed-upload
+function pickSigned(resp: any) {
+  if (!resp || typeof resp !== 'object') return null;
+  if (resp.url && resp.path) return { url: resp.url, path: resp.path };
+  if (resp.signedUrl && resp.path) return { url: resp.signedUrl, path: resp.path };
+  if (resp.uploadUrl && resp.objectPath) return { url: resp.uploadUrl, path: resp.objectPath };
+  if (resp.data) {
+    const d = resp.data;
+    if (d.url && d.path) return { url: d.url, path: d.path };
+    if (d.signedUrl && d.path) return { url: d.signedUrl, path: d.path };
+    if (d.uploadUrl && d.objectPath) return { url: d.uploadUrl, path: d.objectPath };
+  }
+  return null;
+}
 
 export default function SubmitPage() {
   const [title, setTitle] = useState('');
@@ -16,24 +31,19 @@ export default function SubmitPage() {
   const [stage, setStage] = useState<Stage>('idle');
   const [message, setMessage] = useState('');
 
-  function humanMB(bytes: number) {
-    return Math.round(bytes / (1024 * 1024));
-  }
-
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] || null;
     setMessage('');
     setFile(null);
-
     if (!f) return;
 
     if (!ALLOWED_MIME.includes(f.type)) {
-      setMessage('Use MP4, MOV, M4V, or WEBM.');
+      setMessage('Use MP4 only. H.264 video + AAC audio recommended.');
       return;
     }
-    const sizeMB = humanMB(f.size);
+    const sizeMB = Math.round(f.size / (1024 * 1024));
     if (sizeMB > MAX_SIZE_MB) {
-      setMessage(`File too large. Max ${MAX_SIZE_MB} MB.`);
+      setMessage(`File too large. Max ${MAX_SIZE_MB} MB (~1.5 GB).`);
       return;
     }
     setFile(f);
@@ -48,12 +58,11 @@ export default function SubmitPage() {
       return;
     }
     if (!file) {
-      setMessage('Choose a valid file first.');
+      setMessage('Choose a valid MP4 file first.');
       return;
     }
 
     try {
-      // 1) Ask backend for a signed upload URL
       setStage('signing');
       const signResp = await fetch('/api/signed-upload', {
         method: 'POST',
@@ -64,20 +73,20 @@ export default function SubmitPage() {
           size: file.size,
         }),
       });
-
+      const signJson = await signResp.json().catch(() => ({} as any));
       if (!signResp.ok) throw new Error('Could not get upload URL');
-      const { url, path } = await signResp.json(); // expects { url, path }
 
-      // 2) Upload file to the signed URL
+      const picked = pickSigned(signJson);
+      if (!picked?.url || !picked?.path) throw new Error('Signed URL missing');
+
       setStage('uploading');
-      const putResp = await fetch(url, {
+      const putResp = await fetch(picked.url, {
         method: 'PUT',
         headers: { 'Content-Type': file.type },
         body: file,
       });
       if (!putResp.ok) throw new Error('Upload failed');
 
-      // 3) Tell backend about the new submission
       setStage('confirming');
       const confirmResp = await fetch('/api/confirm-upload', {
         method: 'POST',
@@ -87,19 +96,19 @@ export default function SubmitPage() {
           artist_name: artistName,
           city,
           year: Number(year),
-          file_path: path, // this is what Admin uses to play the video
+          file_path: picked.path,
         }),
       });
-      if (!confirmResp.ok) throw new Error('Confirm failed');
+      if (!confirmResp.ok) throw new Error('Save failed');
 
       setStage('done');
       setMessage('Submitted. Thank you.');
-      // reset form
+
       setTitle('');
       setArtistName('');
       setCity('');
       setYear('');
-      (document.getElementById('file-input') as HTMLInputElement)?.value && ((document.getElementById('file-input') as HTMLInputElement).value = '');
+      (document.getElementById('file-input') as HTMLInputElement).value = '';
       setFile(null);
     } catch (err: any) {
       setStage('error');
@@ -114,9 +123,9 @@ export default function SubmitPage() {
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
         <b>Rules</b>
         <ul style={{ marginTop: 8, lineHeight: 1.5 }}>
-          <li>Allowed types: <b>MP4</b>, <b>MOV</b>, <b>M4V</b>, <b>WEBM</b></li>
-          <li>Maximum size: <b>{MAX_SIZE_MB} MB</b> (about 2 GB)</li>
-          <li>Best playback: <b>MP4</b> with <b>H.264</b> video and <b>AAC</b> audio</li>
+          <li>Allowed type: <b>MP4</b></li>
+          <li>Maximum size: <b>{MAX_SIZE_MB} MB</b> (~1.5 GB)</li>
+          <li>Suggested codec: <b>H.264</b> video and <b>AAC</b> audio</li>
         </ul>
       </div>
 
@@ -141,12 +150,18 @@ export default function SubmitPage() {
         <input
           id="file-input"
           type="file"
-          accept=".mp4,.mov,.m4v,.webm,video/mp4,video/quicktime,video/x-m4v,video/webm"
+          accept=".mp4,video/mp4"
           onChange={onFileChange}
         />
 
-        <button className="btn" type="submit" disabled={stage === 'signing' || stage === 'uploading' || stage === 'confirming'}>
-          {stage === 'signing' ? 'Preparing…' : stage === 'uploading' ? 'Uploading…' : stage === 'confirming' ? 'Saving…' : 'Submit'}
+        <button
+          className="btn"
+          type="submit"
+          disabled={stage === 'signing' || stage === 'uploading' || stage === 'confirming'}
+        >
+          {stage === 'signing' ? 'Preparing…' :
+           stage === 'uploading' ? 'Uploading…' :
+           stage === 'confirming' ? 'Saving…' : 'Submit'}
         </button>
       </form>
 
