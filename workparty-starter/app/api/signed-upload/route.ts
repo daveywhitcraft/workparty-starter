@@ -1,45 +1,41 @@
-import { NextResponse } from 'next/server';
-import { supabaseService } from '@/lib/supabaseServer';
+import { NextRequest, NextResponse } from 'next/server';
+import { createClient } from '@supabase/supabase-js';
 
-export async function POST(req: Request) {
-  const body = await req.json();
-  const { path, meta } = body as { path: string, meta: Record<string, any> };
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY! // needs the "service role" key, not anon
+);
 
-  const admin = supabaseService();
+export async function POST(req: NextRequest) {
+  try {
+    const { filename, contentType, size } = await req.json();
 
-  // Create DB row with pending status
-  const { data: row, error: rowErr } = await admin
-    .from('submissions')
-    .insert({
-      artist_name: meta.artist_name ?? null,
-      email: meta.email ?? null,
-      city: meta.city ?? null,
-      title: meta.title ?? null,
-      year: meta.year ?? null,
-      runtime: meta.runtime ?? null,
-      aspect_ratio: meta.aspect_ratio ?? null,
-      resolution: meta.resolution ?? null,
-      synopsis: meta.synopsis ?? null,
-      credits: meta.credits ?? null,
-      file_path: path,
-      consent_archive: !!meta.consent_archive
-    })
-    .select('id')
-    .single();
+    if (!filename || !contentType || !size) {
+      return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+    }
 
-  if (rowErr || !row) {
-    return NextResponse.json({ error: rowErr?.message || 'row insert issue' }, { status: 500 });
+    if (size > 250 * 1024 * 1024) {
+      return NextResponse.json({ error: 'File too large' }, { status: 400 });
+    }
+
+    // Put everything into "uploads/" folder inside your bucket
+    const filePath = `uploads/${Date.now()}-${filename}`;
+
+    const { data, error } = await supabase.storage
+      .from('uploads') // bucket name must match your Supabase bucket
+      .createSignedUploadUrl(filePath);
+
+    if (error || !data) {
+      console.error('Supabase signed URL error:', error);
+      return NextResponse.json({ error: 'Failed to create signed URL' }, { status: 500 });
+    }
+
+    return NextResponse.json({
+      url: data.signedUrl,
+      path: filePath,
+    });
+  } catch (err: any) {
+    console.error('Signed upload error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
-
-  // Create a signed upload URL for this path
-  const { data: signed, error: signErr } = await admin
-    .storage
-    .from('videos')
-    .createSignedUploadUrl(path);
-
-  if (signErr || !signed) {
-    return NextResponse.json({ error: signErr?.message || 'sign issue' }, { status: 500 });
-  }
-
-  return NextResponse.json({ rowId: row.id, signedUrl: signed.signedUrl, token: signed.token });
 }
