@@ -1,119 +1,60 @@
-'use client';
-import { useState } from 'react';
-import { Submission } from '@/types';
+"use client";
 
-function guessMime(path: string): string {
-  const ext = path.split('.').pop()?.toLowerCase();
-  if (ext === 'mp4') return 'video/mp4';
-  if (ext === 'm4v') return 'video/x-m4v';
-  if (ext === 'mov') return 'video/quicktime';
-  if (ext === 'webm') return 'video/webm';
-  return 'application/octet-stream';
-}
+import { useState } from "react";
+
+type Item = { path: string; signedUrl: string };
 
 export default function AdminPage() {
-  const [pass, setPass] = useState('');
-  const [rows, setRows] = useState<Submission[]>([]);
-  const [status, setStatus] = useState('');
-  const [authed, setAuthed] = useState(false);
+  const [videos, setVideos] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
-  async function load() {
-    const resp = await fetch('/api/list-all', { headers: { 'x-admin': pass } });
-    if (!resp.ok) { setStatus('Could not load items'); return; }
-    const json = await resp.json();
-    setRows(Array.isArray(json.rows) ? json.rows : []);
-  }
-
-  async function handleLogin(e: React.FormEvent) {
-    e.preventDefault();
-    setStatus('Checking...');
-    const resp = await fetch('/api/list-all', { headers: { 'x-admin': pass } });
-    if (resp.ok) {
-      setAuthed(true);
-      setStatus('Access granted');
-      const json = await resp.json();
-      setRows(Array.isArray(json.rows) ? json.rows : []);
-    } else {
-      setStatus('Wrong password');
+  async function loadVideos() {
+    try {
+      setLoading(true);
+      setErr(null);
+      const res = await fetch("/api/admin/videos", { cache: "no-store" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setVideos(Array.isArray(data.items) ? data.items : []);
+    } catch (e: any) {
+      setErr(e.message || "Failed to load");
+    } finally {
+      setLoading(false);
     }
   }
 
-  async function setRow(id: string, body: any) {
-    setStatus('Saving...');
-    const resp = await fetch('/api/admin', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-admin': pass,
-      },
-      body: JSON.stringify({ id, ...body }),
-    });
-    if (!resp.ok) { setStatus('Save issue'); return; }
-    setStatus('Saved');
-    load();
-  }
-
   return (
-    <section>
-      <h1 className="title">Admin</h1>
+    <section className="p-6 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-semibold mb-4">Admin</h1>
 
-      {!authed ? (
-        <form onSubmit={handleLogin} className="row" style={{ gap: 8 }}>
-          <input
-            type="password"
-            placeholder="Admin pass"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-          />
-          <button type="submit" className="btn">Submit</button>
-        </form>
-      ) : (
-        <>
-          <p className="muted" style={{ margin: '12px 0' }}>
-            Showing active items. Archived items stay hidden.
-          </p>
+      <button
+        onClick={loadVideos}
+        className="px-4 py-2 rounded bg-black text-white disabled:opacity-60"
+        disabled={loading}
+      >
+        {loading ? "Loading…" : "Load Videos"}
+      </button>
 
-          <div className="grid">
-            {rows
-              .filter((r: any) => r.status !== 'archived')
-              .map((r: any) => (
-                <div className="card" key={r.id}>
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <b>{r.title}</b><span className="muted">{r.artist_name}</span>
-                  </div>
-                  <p className="muted">{r.city} · {r.year}</p>
+      {err && <p className="mt-3 text-red-600">Error: {err}</p>}
 
-                  <div className="row" style={{ gap: 8 }}>
-                    <button className="btn" onClick={() => setRow(r.id, { status: 'approved' })}>Approve</button>
-                    <button className="btn" onClick={() => setRow(r.id, { status: 'rejected' })}>Reject</button>
-                    <button className="btn" onClick={() => setRow(r.id, { status: 'archived' })}>Archive</button>
-                  </div>
-
-                  <div className="row" style={{ marginTop: 8, gap: 8 }}>
-                    <label>Order</label>
-                    <input
-                      type="number"
-                      defaultValue={r.order_index || 0}
-                      onBlur={(e) => setRow(r.id, { order_index: Number(e.target.value) })}
-                    />
-                  </div>
-
-                  <div style={{ marginTop: 8 }}>
-                    <video controls preload="metadata" style={{ width: '100%' }} playsInline>
-                      <source
-                        src={`/api/stream?path=${encodeURIComponent(r.file_path)}`}
-                        type={guessMime(r.file_path || '')}
-                      />
-                      Your browser cannot play this video.
-                    </video>
-                  </div>
-                </div>
-              ))}
-          </div>
-        </>
+      {!loading && !err && videos.length === 0 && (
+        <p className="mt-4 text-sm text-neutral-600">No videos yet.</p>
       )}
 
-      <p className="muted" style={{ marginTop: 12 }}>{status}</p>
+      <ul className="mt-6 grid grid-cols-1 gap-6">
+        {videos.map((v) => (
+          <li key={v.path} className="border rounded p-4">
+            <p className="text-xs mb-2 break-all">{v.path}</p>
+            <video
+              src={v.signedUrl}
+              controls
+              className="w-full h-auto"
+              preload="metadata"
+            />
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
