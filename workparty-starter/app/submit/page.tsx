@@ -1,6 +1,5 @@
 'use client';
 import { useState } from 'react';
-import { v4 as uuidv4 } from 'uuid';
 
 export default function SubmitPage() {
   const [status, setStatus] = useState<string>('');
@@ -15,26 +14,33 @@ export default function SubmitPage() {
 
     if (!file) { setStatus('Choose a video file'); return; }
 
-    // Ask server for a signed upload URL and create a DB record
-    const path = `${uuidv4()}/${file.name}`;
+    // Unique path for the upload
+    const path = `${crypto.randomUUID()}/${file.name}`;
+
+    // Ask the server for a signed upload URL and create a DB row
     const resp = await fetch('/api/signed-upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ path, meta })
     });
+
     if (!resp.ok) { setStatus('Issue creating upload link'); return; }
     const data = await resp.json();
 
     setStatus('Uploading...');
-    // Upload directly to Supabase using signed URL token
+    // Upload directly to Supabase using the signed URL
     const uploadResp = await fetch(data.signedUrl, {
       method: 'PUT',
-      headers: { 'Authorization': `Bearer ${data.token}`, 'x-upsert': 'true', 'Content-Type': file.type || 'application/octet-stream' },
+      headers: {
+        'Authorization': `Bearer ${data.token}`,
+        'x-upsert': 'true',
+        'Content-Type': file.type || 'application/octet-stream'
+      },
       body: file
     });
     if (!uploadResp.ok) { setStatus('Upload failed'); return; }
 
-    // Confirm upload to update status in DB
+    // Confirm to update status in DB
     await fetch('/api/confirm-upload', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -50,6 +56,7 @@ export default function SubmitPage() {
     <section>
       <h1 className="title">Submit</h1>
       <p className="muted">Upload a single video with metadata. After review, items can appear in the Current Screening.</p>
+
       <form onSubmit={handleSubmit} className="grid">
         <input name="artist_name" placeholder="Artist name" required />
         <input name="email" type="email" placeholder="Email" required />
@@ -61,13 +68,21 @@ export default function SubmitPage() {
         <input name="resolution" placeholder="Resolution" />
         <textarea name="synopsis" placeholder="Synopsis"></textarea>
         <textarea name="credits" placeholder="Credits"></textarea>
-        <label className="row"><input type="checkbox" name="consent_archive" /> Consent for Archive listing</label>
+        <label className="row">
+          <input type="checkbox" name="consent_archive" /> Consent for Archive listing
+        </label>
         <label className="row">
           <span>Video file</span>
-          <input type="file" accept="video/*" onChange={(e)=> setFile(e.target.files?.[0] ?? null)} required />
+          <input
+            type="file"
+            accept="video/*"
+            onChange={(e)=> setFile(e.target.files?.[0] ?? null)}
+            required
+          />
         </label>
         <button className="btn primary" type="submit">Send</button>
       </form>
+
       <p className="muted" style={{marginTop:12}}>{status}</p>
     </section>
   );
