@@ -1,18 +1,16 @@
 'use client';
 import { useState } from 'react';
 
-const MAX_SIZE_MB = 1500; // ~1.5 GB hard cap
-const ALLOWED_MIME = ['video/mp4']; // MP4 only for reliable web playback
+const MAX_SIZE_MB = 250; // 250 MB
+const ALLOWED_MIME = ['video/mp4']; // MP4 only
 
 type Stage = 'idle' | 'signing' | 'uploading' | 'confirming' | 'done' | 'error';
 
-// accept several possible response shapes from /api/signed-upload
 function pickSigned(resp: any) {
-  if (!resp || typeof resp !== 'object') return null;
-  if (resp.url && resp.path) return { url: resp.url, path: resp.path };
-  if (resp.signedUrl && resp.path) return { url: resp.signedUrl, path: resp.path };
-  if (resp.uploadUrl && resp.objectPath) return { url: resp.uploadUrl, path: resp.objectPath };
-  if (resp.data) {
+  if (resp?.url && resp?.path) return { url: resp.url, path: resp.path };
+  if (resp?.signedUrl && resp?.path) return { url: resp.signedUrl, path: resp.path };
+  if (resp?.uploadUrl && resp?.objectPath) return { url: resp.uploadUrl, path: resp.objectPath };
+  if (resp?.data) {
     const d = resp.data;
     if (d.url && d.path) return { url: d.url, path: d.path };
     if (d.signedUrl && d.path) return { url: d.signedUrl, path: d.path };
@@ -22,28 +20,37 @@ function pickSigned(resp: any) {
 }
 
 export default function SubmitPage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [stage, setStage] = useState<Stage>('idle');
+  const [message, setMessage] = useState('');
+
+  // Metadata fields
   const [title, setTitle] = useState('');
   const [artistName, setArtistName] = useState('');
   const [city, setCity] = useState('');
+  const [country, setCountry] = useState('');
   const [year, setYear] = useState<number | ''>('');
-  const [file, setFile] = useState<File | null>(null);
-
-  const [stage, setStage] = useState<Stage>('idle');
-  const [message, setMessage] = useState('');
+  const [email, setEmail] = useState('');
+  const [runtime, setRuntime] = useState('');
+  const [description, setDescription] = useState('');
+  const [link, setLink] = useState('');
+  const [instagram, setInstagram] = useState('');
+  const [agree, setAgree] = useState(false);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] || null;
     setMessage('');
     setFile(null);
+
     if (!f) return;
 
     if (!ALLOWED_MIME.includes(f.type)) {
-      setMessage('Use MP4 only. H.264 video + AAC audio recommended.');
+      setMessage('Only MP4 files are accepted.');
       return;
     }
     const sizeMB = Math.round(f.size / (1024 * 1024));
     if (sizeMB > MAX_SIZE_MB) {
-      setMessage(`File too large. Max ${MAX_SIZE_MB} MB (~1.5 GB).`);
+      setMessage(`File too large. Max ${MAX_SIZE_MB} MB.`);
       return;
     }
     setFile(f);
@@ -53,12 +60,8 @@ export default function SubmitPage() {
     e.preventDefault();
     setMessage('');
 
-    if (!title || !artistName || !city || !year) {
-      setMessage('Fill in title, artist, city, and year.');
-      return;
-    }
-    if (!file) {
-      setMessage('Choose a valid MP4 file first.');
+    if (!title || !artistName || !city || !year || !email || !file || !agree) {
+      setMessage('Please fill all required fields and agree to terms.');
       return;
     }
 
@@ -95,7 +98,13 @@ export default function SubmitPage() {
           title,
           artist_name: artistName,
           city,
+          country,
           year: Number(year),
+          email,
+          runtime,
+          description,
+          link,
+          instagram,
           file_path: picked.path,
         }),
       });
@@ -104,12 +113,20 @@ export default function SubmitPage() {
       setStage('done');
       setMessage('Submitted. Thank you.');
 
+      // Reset form
       setTitle('');
       setArtistName('');
       setCity('');
+      setCountry('');
       setYear('');
+      setEmail('');
+      setRuntime('');
+      setDescription('');
+      setLink('');
+      setInstagram('');
       (document.getElementById('file-input') as HTMLInputElement).value = '';
       setFile(null);
+      setAgree(false);
     } catch (err: any) {
       setStage('error');
       setMessage(err?.message || 'Submission problem.');
@@ -124,48 +141,16 @@ export default function SubmitPage() {
         <b>Rules</b>
         <ul style={{ marginTop: 8, lineHeight: 1.5 }}>
           <li>Allowed type: <b>MP4</b></li>
-          <li>Maximum size: <b>{MAX_SIZE_MB} MB</b> (~1.5 GB)</li>
-          <li>Suggested codec: <b>H.264</b> video and <b>AAC</b> audio</li>
+          <li>Maximum size: <b>{MAX_SIZE_MB} MB</b></li>
         </ul>
       </div>
 
       <form onSubmit={onSubmit} className="flex-col" style={{ gap: 12 }}>
-        <label className="muted">Title</label>
+        <label>Title *</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} />
 
-        <label className="muted">Artist name</label>
+        <label>Artist name *</label>
         <input value={artistName} onChange={(e) => setArtistName(e.target.value)} />
 
-        <label className="muted">City</label>
-        <input value={city} onChange={(e) => setCity(e.target.value)} />
-
-        <label className="muted">Year</label>
-        <input
-          type="number"
-          value={year}
-          onChange={(e) => setYear(e.target.value === '' ? '' : Number(e.target.value))}
-        />
-
-        <label className="muted">Video file</label>
-        <input
-          id="file-input"
-          type="file"
-          accept=".mp4,video/mp4"
-          onChange={onFileChange}
-        />
-
-        <button
-          className="btn"
-          type="submit"
-          disabled={stage === 'signing' || stage === 'uploading' || stage === 'confirming'}
-        >
-          {stage === 'signing' ? 'Preparing…' :
-           stage === 'uploading' ? 'Uploading…' :
-           stage === 'confirming' ? 'Saving…' : 'Submit'}
-        </button>
-      </form>
-
-      {message ? <p className="muted" style={{ marginTop: 12 }}>{message}</p> : null}
-    </section>
-  );
-}
+        <label>City *</label>
+        <input value={city} onChange
