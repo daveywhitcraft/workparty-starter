@@ -1,7 +1,13 @@
 import { NextRequest } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const BUCKET = 'videos'; // <- your bucket
+const SERVICE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE ||
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+  '';
+
+const BUCKET = 'videos'; // your bucket
 
 function guessMime(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase();
@@ -19,8 +25,8 @@ export async function GET(req: NextRequest) {
     if (!path) return new Response('Missing path', { status: 400 });
 
     const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL as string,
-      process.env.SUPABASE_SERVICE_ROLE_KEY as string
+      process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+      SERVICE_KEY
     );
 
     const { data, error } = await supabase.storage
