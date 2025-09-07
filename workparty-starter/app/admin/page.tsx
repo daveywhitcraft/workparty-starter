@@ -1,7 +1,8 @@
-export const runtime = "nodejs"; // ensure server runtime on Vercel
+export const runtime = "nodejs";
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
 
 type Submission = {
@@ -14,9 +15,15 @@ type Submission = {
   status?: string | null;
 };
 
-export default async function AdminPage() {
-  const authed = cookies().get("wp_admin_auth")?.value === "1";
+type Props = {
+  searchParams?: { status?: string };
+};
 
+export default async function AdminPage({ searchParams }: Props) {
+  const authed = cookies().get("wp_admin_auth")?.value === "1";
+  const activeStatus = (searchParams?.status || "all").toLowerCase();
+
+  // ---------- Auth (server-side) ----------
   async function login(formData: FormData) {
     "use server";
     const pwd = String(formData.get("password") || "");
@@ -56,23 +63,36 @@ export default async function AdminPage() {
     );
   }
 
-  // --- DATA FETCH ---
+  // ---------- Supabase client (server) ----------
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const srvKey = process.env.SUPABASE_SERVICE_ROLE || ""; // server-only key
+  const srvKey = process.env.SUPABASE_SERVICE_ROLE || "";
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-
-  // prefer service role; fall back to anon if missing
-  const supabase = createClient(supabaseUrl, srvKey || anonKey, {
-    auth: { persistSession: false },
-  });
-
-  const { data, error } = await supabase
-    .from("submissions")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  const rows = (data as Submission[]) || [];
+  const supabase = createClient(supabaseUrl, srvKey || anonKey, { auth: { persistSession: false } });
   const publicBase = `${supabaseUrl}/storage/v1/object/public`;
+
+  // ---------- Actions ----------
+  async function setStatus(formData: FormData) {
+    "use server";
+    const id = String(formData.get("id") || "");
+    const status = String(formData.get("status") || "");
+    const sb = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+      process.env.SUPABASE_SERVICE_ROLE || "",
+      { auth: { persistSession: false } }
+    );
+    if (id && status) {
+      await sb.from("submissions").update({ status }).eq("id", id);
+    }
+    redirect(`/admin?status=${encodeURIComponent(activeStatus)}`);
+  }
+
+  // ---------- Query ----------
+  let query = supabase.from("submissions").select("*").order("created_at", { ascending: false });
+  if (["pending", "approved", "archived"].includes(activeStatus)) {
+    query = query.eq("status", activeStatus);
+  }
+  const { data, error } = await query;
+  const rows = (data as Submission[]) || [];
 
   return (
     <div style={{ padding: 24, maxWidth: 980 }}>
@@ -81,19 +101,26 @@ export default async function AdminPage() {
         <form action={logout}><button type="submit" style={{ fontSize: 14 }}>Log out</button></form>
       </div>
 
-      {/* --- SIMPLE DIAGNOSTICS (visible on page to kill the guesswork) --- */}
-      <div style={{ fontSize: 12, opacity: 0.7, marginTop: 8 }}>
-        <div>Supabase URL set: {supabaseUrl ? "yes" : "no"}</div>
-        <div>Service role present: {srvKey ? "yes" : "no"}</div>
-        <div>Anon key present: {anonKey ? "yes" : "no"}</div>
-        <div>Query error: {error ? error.message : "none"}</div>
-        <div>Found submissions: {rows.length}</div>
-      </div>
+      {/* Filters */}
+      <nav style={{ marginTop: 12, display: "flex", gap: 12, fontSize: 14 }}>
+        {["all", "pending", "approved", "archived"].map((s) => (
+          <Link
+            key={s}
+            href={`/admin?status=${s}`}
+            style={{
+              textDecoration: activeStatus === s ? "underline" : "none",
+              opacity: activeStatus === s ? 1 : 0.8,
+            }}
+          >
+            {s[0].toUpperCase() + s.slice(1)}
+          </Link>
+        ))}
+      </nav>
 
       {error ? (
-        <p style={{ color: "crimson", marginTop: 12 }}>Error loading submissions: {error.message}</p>
+        <p style={{ color: "crimson", marginTop: 12 }}>Error: {error.message}</p>
       ) : rows.length === 0 ? (
-        <p style={{ marginTop: 12 }}>No videos yet.</p>
+        <p style={{ marginTop: 12 }}>No videos.</p>
       ) : (
         <ul style={{ display: "grid", gap: 12, listStyle: "none", padding: 0, marginTop: 16 }}>
           {rows.map((s) => {
@@ -114,16 +141,31 @@ export default async function AdminPage() {
                       <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>{s.description}</p>
                     ) : null}
                   </div>
-                  {fileUrl ? (
-                    <a href={fileUrl} target="_blank" rel="noreferrer" style={{ alignSelf: "flex-start" }}>
-                      Open file
-                    </a>
-                  ) : null}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <form action={setStatus}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="status" value="approved" />
+                      <button type="submit" style={{ fontSize: 12 }}>Approve</button>
+                    </form>
+                    <form action={setStatus}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="status" value="archived" />
+                      <button type="submit" style={{ fontSize: 12 }}>Archive</button>
+                    </form>
+                    <form action={setStatus}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="status" value="pending" />
+                      <button type="submit" style={{ fontSize: 12 }}>Pending</button>
+                    </form>
+                  </div>
                 </div>
 
                 {fileUrl ? (
                   <div style={{ marginTop: 12 }}>
                     <video controls preload="metadata" style={{ maxWidth: "100%", borderRadius: 6 }} src={fileUrl} />
+                    <div style={{ marginTop: 6 }}>
+                      <a href={fileUrl} target="_blank" rel="noreferrer">Open file</a>
+                    </div>
                   </div>
                 ) : null}
               </li>
