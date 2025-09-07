@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Pick up your existing Vercel env names
 const serviceKey =
   process.env.SUPABASE_SERVICE_ROLE ||
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
@@ -16,18 +15,19 @@ const supabase = createClient(
   serviceKey
 );
 
+// Recursively list all files (skip folders)
 async function listAll(prefix = ""): Promise<string[]> {
   const { data, error } = await supabase.storage
     .from("submissions")
-    .list(prefix, { limit: 1000 });
+    .list(prefix, { limit: 1000, sortBy: { column: "name", order: "asc" } });
 
   if (error) throw error;
 
   const out: string[] = [];
   for (const item of data || []) {
-    // files have metadata, folders don’t
+    // Folders have no id; files have an id
     // @ts-ignore
-    if (item.metadata?.mimetype) {
+    if (item.id) {
       out.push(`${prefix}${item.name}`);
     } else {
       out.push(...(await listAll(`${prefix}${item.name}/`)));
@@ -39,9 +39,7 @@ async function listAll(prefix = ""): Promise<string[]> {
 export async function GET() {
   try {
     const paths = await listAll("");
-    if (!paths.length) {
-      return NextResponse.json({ items: [] });
-    }
+    if (!paths.length) return NextResponse.json({ items: [] });
 
     const { data: signed, error } = await supabase.storage
       .from("submissions")
@@ -56,9 +54,6 @@ export async function GET() {
       })),
     });
   } catch (e: any) {
-    return NextResponse.json(
-      { error: e.message || "list failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: e.message || "list failed" }, { status: 500 });
   }
 }
