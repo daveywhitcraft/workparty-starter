@@ -1,89 +1,156 @@
 'use client';
 import { useState } from 'react';
 
+const MAX_SIZE_MB = 2000; // 2 GB
+const ALLOWED_MIME = ['video/mp4', 'video/quicktime', 'video/x-m4v', 'video/webm'];
+
+type Stage = 'idle' | 'signing' | 'uploading' | 'confirming' | 'done' | 'error';
+
 export default function SubmitPage() {
-  const [status, setStatus] = useState<string>('');
+  const [title, setTitle] = useState('');
+  const [artistName, setArtistName] = useState('');
+  const [city, setCity] = useState('');
+  const [year, setYear] = useState<number | ''>('');
   const [file, setFile] = useState<File | null>(null);
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setStatus('Preparing upload...');
+  const [stage, setStage] = useState<Stage>('idle');
+  const [message, setMessage] = useState('');
 
-    const form = new FormData(e.currentTarget);
-    const meta = Object.fromEntries(form.entries());
+  function humanMB(bytes: number) {
+    return Math.round(bytes / (1024 * 1024));
+  }
 
-    if (!file) { setStatus('Choose a video file'); return; }
-
-    // Unique path for the upload
-    const path = `${crypto.randomUUID()}/${file.name}`;
-
-    // Ask the server for a signed upload URL and create a DB row
-    const resp = await fetch('/api/signed-upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, meta })
-    });
-
-    if (!resp.ok) { setStatus('Issue creating upload link'); return; }
-    const data = await resp.json();
-
-    setStatus('Uploading...');
-    // Upload directly to Supabase using the signed URL
-    const uploadResp = await fetch(data.signedUrl, {
-      method: 'PUT',
-      headers: {
-        'Authorization': `Bearer ${data.token}`,
-        'x-upsert': 'true',
-        'Content-Type': file.type || 'application/octet-stream'
-      },
-      body: file
-    });
-    if (!uploadResp.ok) { setStatus('Upload failed'); return; }
-
-    // Confirm to update status in DB
-    await fetch('/api/confirm-upload', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: data.rowId })
-    });
-
-    setStatus('Submitted. Thank you.');
-    (e.target as HTMLFormElement).reset();
+  function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0] || null;
+    setMessage('');
     setFile(null);
+
+    if (!f) return;
+
+    if (!ALLOWED_MIME.includes(f.type)) {
+      setMessage('Use MP4, MOV, M4V, or WEBM.');
+      return;
+    }
+    const sizeMB = humanMB(f.size);
+    if (sizeMB > MAX_SIZE_MB) {
+      setMessage(`File too large. Max ${MAX_SIZE_MB} MB.`);
+      return;
+    }
+    setFile(f);
+  }
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setMessage('');
+
+    if (!title || !artistName || !city || !year) {
+      setMessage('Fill in title, artist, city, and year.');
+      return;
+    }
+    if (!file) {
+      setMessage('Choose a valid file first.');
+      return;
+    }
+
+    try {
+      // 1) Ask backend for a signed upload URL
+      setStage('signing');
+      const signResp = await fetch('/api/signed-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+          size: file.size,
+        }),
+      });
+
+      if (!signResp.ok) throw new Error('Could not get upload URL');
+      const { url, path } = await signResp.json(); // expects { url, path }
+
+      // 2) Upload file to the signed URL
+      setStage('uploading');
+      const putResp = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      });
+      if (!putResp.ok) throw new Error('Upload failed');
+
+      // 3) Tell backend about the new submission
+      setStage('confirming');
+      const confirmResp = await fetch('/api/confirm-upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          artist_name: artistName,
+          city,
+          year: Number(year),
+          file_path: path, // this is what Admin uses to play the video
+        }),
+      });
+      if (!confirmResp.ok) throw new Error('Confirm failed');
+
+      setStage('done');
+      setMessage('Submitted. Thank you.');
+      // reset form
+      setTitle('');
+      setArtistName('');
+      setCity('');
+      setYear('');
+      (document.getElementById('file-input') as HTMLInputElement)?.value && ((document.getElementById('file-input') as HTMLInputElement).value = '');
+      setFile(null);
+    } catch (err: any) {
+      setStage('error');
+      setMessage(err?.message || 'Submission problem.');
+    }
   }
 
   return (
-    <section>
-      <h1 className="title">Submit</h1>
-      <p className="muted">Upload a single video with metadata. After review, items can appear in the Current Screening.</p>
+    <section className="p-6 max-w-2xl">
+      <h1 className="title mb-4">Submit your video</h1>
 
-      <form onSubmit={handleSubmit} className="grid">
-        <input name="artist_name" placeholder="Artist name" required />
-        <input name="email" type="email" placeholder="Email" required />
-        <input name="city" placeholder="City" />
-        <input name="title" placeholder="Work title" required />
-        <input name="year" placeholder="Year" />
-        <input name="runtime" placeholder="Runtime (mm:ss)" />
-        <input name="aspect_ratio" placeholder="Aspect ratio" />
-        <input name="resolution" placeholder="Resolution" />
-        <textarea name="synopsis" placeholder="Synopsis"></textarea>
-        <textarea name="credits" placeholder="Credits"></textarea>
-        <label className="row">
-          <input type="checkbox" name="consent_archive" /> Consent for Archive listing
-        </label>
-        <label className="row">
-          <span>Video file</span>
-          <input
-            type="file"
-            accept="video/*"
-            onChange={(e)=> setFile(e.target.files?.[0] ?? null)}
-            required
-          />
-        </label>
-        <button className="btn primary" type="submit">Send</button>
+      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+        <b>Rules</b>
+        <ul style={{ marginTop: 8, lineHeight: 1.5 }}>
+          <li>Allowed types: <b>MP4</b>, <b>MOV</b>, <b>M4V</b>, <b>WEBM</b></li>
+          <li>Maximum size: <b>{MAX_SIZE_MB} MB</b> (about 2 GB)</li>
+          <li>Best playback: <b>MP4</b> with <b>H.264</b> video and <b>AAC</b> audio</li>
+        </ul>
+      </div>
+
+      <form onSubmit={onSubmit} className="flex-col" style={{ gap: 12 }}>
+        <label className="muted">Title</label>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} />
+
+        <label className="muted">Artist name</label>
+        <input value={artistName} onChange={(e) => setArtistName(e.target.value)} />
+
+        <label className="muted">City</label>
+        <input value={city} onChange={(e) => setCity(e.target.value)} />
+
+        <label className="muted">Year</label>
+        <input
+          type="number"
+          value={year}
+          onChange={(e) => setYear(e.target.value === '' ? '' : Number(e.target.value))}
+        />
+
+        <label className="muted">Video file</label>
+        <input
+          id="file-input"
+          type="file"
+          accept=".mp4,.mov,.m4v,.webm,video/mp4,video/quicktime,video/x-m4v,video/webm"
+          onChange={onFileChange}
+        />
+
+        <button className="btn" type="submit" disabled={stage === 'signing' || stage === 'uploading' || stage === 'confirming'}>
+          {stage === 'signing' ? 'Preparing…' : stage === 'uploading' ? 'Uploading…' : stage === 'confirming' ? 'Saving…' : 'Submit'}
+        </button>
       </form>
 
-      <p className="muted" style={{marginTop:12}}>{status}</p>
+      {message ? <p className="muted" style={{ marginTop: 12 }}>{message}</p> : null}
     </section>
   );
 }
