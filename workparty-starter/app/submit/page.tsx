@@ -146,11 +146,4 @@ export default function SubmitPage() {
       </div>
 
       <form onSubmit={onSubmit} className="flex-col" style={{ gap: 12 }}>
-        <label>Title *</label>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} />
-
-        <label>Artist name *</label>
-        <input value={artistName} onChange={(e) => setArtistName(e.target.value)} />
-
-        <label>City *</label>
-        <input value={city} onChange
+        <label>Tit
