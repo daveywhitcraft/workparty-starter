@@ -198,18 +198,15 @@ export default async function AdminPage({ searchParams }: Props) {
       <form method="get" style={{ marginTop: 12, marginBottom: 12 }}>
         <input type="hidden" name="status" value={activeStatus} />
         <label style={{ fontSize: 14, marginRight: 8 }}>Event:</label>
-        <select
-          name="event"
-          defaultValue={eventFilter || ""}
-          onChange={(e) => e.currentTarget.form?.submit()}
-        >
+        <select name="event" defaultValue={eventFilter ?? ""}>
           <option value="">All</option>
           {allEvents.map((ev) => (
             <option key={ev.id} value={ev.id}>
-              {ev.title || ev.slug} {ev.city ? `— ${ev.city}` : ""}
+              {ev.title || ev.slug} {ev.city ? `• ${ev.city}` : ""}
             </option>
           ))}
         </select>
+        <button type="submit" style={{ marginLeft: 8 }}>Apply</button>
       </form>
 
       {error ? (
@@ -248,7 +245,7 @@ export default async function AdminPage({ searchParams }: Props) {
                     {new Date(s.created_at).toLocaleString()}
                     {s.status ? ` · ${s.status}` : ""}
                   </div>
-                  {s.description ? (
+                    {s.description ? (
                     <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
                       {s.description}
                     </p>
