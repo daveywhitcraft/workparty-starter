@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { createClient } from "@supabase/supabase-js";
-import Player from "./Player"; // ✅ important
+import Player from "./Player";
 
 type EventRow = { id: number; slug: string; title?: string | null; city?: string | null };
 type Submission = {
@@ -33,7 +33,7 @@ export default async function ScreenPage({ params }: PageProps) {
     .from("events")
     .select("id, slug, title, city")
     .eq("slug", params.slug)
-    .maybeSingle<EventRow>();
+    .maybeSingle();
 
   if (evErr || !evData) {
     return (
