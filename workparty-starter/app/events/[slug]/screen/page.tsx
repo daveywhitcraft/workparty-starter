@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
 import { createClient } from "@supabase/supabase-js";
+import Player from "./Player"; // ✅ important
 
 type EventRow = { id: number; slug: string; title?: string | null; city?: string | null };
 type Submission = {
@@ -32,7 +33,6 @@ export default async function ScreenPage({ params }: PageProps) {
     .from("events")
     .select("id, slug, title, city")
     .eq("slug", params.slug)
-    .limit(1)
     .maybeSingle<EventRow>();
 
   if (evErr || !evData) {
@@ -92,7 +92,6 @@ export default async function ScreenPage({ params }: PageProps) {
     })
   );
 
-  // Keep only valid video files
   const filtered = playlist.filter((p) => p.src && p.type === "video");
   if (!filtered.length) {
     return (
@@ -104,7 +103,6 @@ export default async function ScreenPage({ params }: PageProps) {
 
   return (
     <div className="fixed inset-0 bg-black">
-      {/* @ts-expect-error: Player is a client component */}
       <Player playlist={filtered} />
     </div>
   );
