@@ -3,7 +3,6 @@ export const runtime = "nodejs";
 import { createClient } from "@supabase/supabase-js";
 import Player from "./Player";
 
-type EventRow = { id: number; slug: string; title?: string | null; city?: string | null };
 type Submission = {
   id: string;
   created_at: string;
@@ -72,7 +71,7 @@ export default async function ScreenPage({ params }: PageProps) {
   const { data: bucketList } = await sb.storage.listBuckets();
   const bucketNames = new Set((bucketList || []).map((b) => b.name));
 
-  const playlist = await Promise.all(
+  const playlistRaw = await Promise.all(
     rows.map(async (s) => {
       const possible = [s.storage_bucket || "", "videos", "submissions", "public"].filter(Boolean) as string[];
       let bucket = possible.find((n) => bucketNames.has(n)) || "";
@@ -86,14 +85,21 @@ export default async function ScreenPage({ params }: PageProps) {
       return {
         id: s.id,
         title: s.title || s.file_path || s.id,
-        src: fileUrl,
+        src: fileUrl as string | null,
         type: s.file_path ? guessType(s.file_path) : "file",
       };
     })
   );
 
-  const filtered = playlist.filter((p) => p.src && p.type === "video");
-  if (!filtered.length) {
+  // Narrow the type so src is definitely a string for the Player
+  const playlist: { id: string; title: string; src: string }[] = playlistRaw
+    .filter(
+      (p): p is { id: string; title: string; src: string; type: string } =>
+        !!p.src && p.type === "video"
+    )
+    .map((p) => ({ id: p.id, title: p.title, src: p.src }));
+
+  if (!playlist.length) {
     return (
       <div style={{ padding: 24, color: "white", background: "black" }}>
         No playable videos found for this event.
@@ -103,7 +109,7 @@ export default async function ScreenPage({ params }: PageProps) {
 
   return (
     <div className="fixed inset-0 bg-black">
-      <Player playlist={filtered} />
+      <Player playlist={playlist} />
     </div>
   );
 }
