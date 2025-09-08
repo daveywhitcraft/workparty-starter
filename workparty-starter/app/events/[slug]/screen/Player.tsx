@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type Item = { id: string; title: string; src: string };
 type Props = { playlist: Item[]; startIndex?: number; autoPlay?: boolean };
@@ -9,31 +9,49 @@ export default function Player({ playlist, startIndex = 0, autoPlay = true }: Pr
   const [idx, setIdx] = useState(startIndex);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
+  // Keep index valid if playlist changes
   useEffect(() => {
     if (idx >= playlist.length) setIdx(0);
   }, [idx, playlist.length]);
 
   const handleEnded = () => {
-    setIdx((current) => (current + 1) % playlist.length);
+    // advance and loop
+    setIdx((n) => (n + 1) % playlist.length);
   };
 
+  // IMPORTANT: do NOT remount the <video>. Instead, swap its src and reload.
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
-    vid.load();
-    if (autoPlay) {
-      vid.play().catch(() => {});
+
+    // Update the src directly to avoid React remounting the element
+    const { src } = playlist[idx] || {};
+    if (!src) return;
+
+    // Only update/reload if the src actually changed
+    if (vid.src !== src) {
+      vid.src = src;
+      try {
+        vid.load();
+      } catch {}
     }
-  }, [idx, autoPlay]);
+
+    if (autoPlay) {
+      vid.play().catch(() => {
+        // Autoplay might be blocked until a user gesture; ignore.
+      });
+    }
+  }, [idx, playlist, autoPlay]);
 
   const current = playlist[idx];
+
   return (
     <div className="fixed inset-0 bg-black flex items-center justify-center">
+      {/* Single persistent video element – no key, no remount between items */}
       <video
-        key={current?.id}
         ref={videoRef}
         className="w-full h-full"
-        src={current?.src}
+        // Don't set src here; we set it imperatively so the element persists
         autoPlay={autoPlay}
         muted
         controls
