@@ -77,7 +77,7 @@ export default async function AdminPage({ searchParams }: Props) {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
   const sb = createClient(url, srv || anon, { auth: { persistSession: false } });
 
-  // Actions
+  // ---------- Actions ----------
   async function setStatus(formData: FormData) {
     "use server";
     const id = String(formData.get("id") || "");
@@ -97,7 +97,56 @@ export default async function AdminPage({ searchParams }: Props) {
     );
   }
 
-  // Fetch events for filter
+  // Create event (slug, title, city, date)
+  async function createEvent(formData: FormData) {
+    "use server";
+    const slug = String(formData.get("slug") || "").trim();
+    const title = String(formData.get("title") || "").trim();
+    const city = String(formData.get("city") || "").trim();
+    const date = String(formData.get("date") || "").trim();
+
+    if (slug && title) {
+      const sb2 = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+        process.env.SUPABASE_SERVICE_ROLE || "",
+        { auth: { persistSession: false } }
+      );
+      await sb2
+        .from("events")
+        .insert({
+          slug,
+          title,
+          city: city || null,
+          start_at: date ? new Date(date).toISOString() : null,
+        });
+    }
+    redirect("/admin");
+  }
+
+  // Assign submission to an event (set event_id)
+  async function assignEvent(formData: FormData) {
+    "use server";
+    const id = String(formData.get("id") || "");
+    const event_id_str = String(formData.get("event_id") || "");
+    const event_id = event_id_str ? Number(event_id_str) : null;
+
+    if (id) {
+      const sb2 = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+        process.env.SUPABASE_SERVICE_ROLE || "",
+        { auth: { persistSession: false } }
+      );
+      await sb2.from("submissions").update({ event_id }).eq("id", id);
+    }
+    redirect(
+      `/admin?status=${encodeURIComponent(activeStatus)}${
+        eventFilter ? `&event=${eventFilter}` : ""
+      }`
+    );
+  }
+
+  // ---------- Data ----------
+  // Fetch events for filter and assignment
   const { data: evs } = await sb
     .from("events")
     .select("id, slug, city, title")
@@ -181,8 +230,20 @@ export default async function AdminPage({ searchParams }: Props) {
         </form>
       </div>
 
+      {/* Create Event */}
+      <section style={{ marginTop: 16, padding: 12, border: "1px solid #343434", borderRadius: 8 }}>
+        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Create New Event</h2>
+        <form action={createEvent} method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <input name="slug" placeholder="Slug (e.g. berlin-2025-09-26)" required style={{ flex: "1 1 180px", padding: 6 }} />
+          <input name="title" placeholder="Title (e.g. Berlin September 26)" required style={{ flex: "2 1 260px", padding: 6 }} />
+          <input name="city" placeholder="City (optional)" style={{ flex: "1 1 140px", padding: 6 }} />
+          <input type="date" name="date" style={{ flex: "0 1 180px", padding: 6 }} />
+          <button type="submit" style={{ padding: "6px 12px" }}>Create event</button>
+        </form>
+      </section>
+
       {/* Status filter */}
-      <nav style={{ marginTop: 12, display: "flex", gap: 12, fontSize: 14 }}>
+      <nav style={{ marginTop: 16, display: "flex", gap: 12, fontSize: 14 }}>
         {["all", "pending", "approved", "archived"].map((s) => (
           <a
             key={s}
@@ -223,106 +284,148 @@ export default async function AdminPage({ searchParams }: Props) {
             marginTop: 16,
           }}
         >
-          {items.map((s) => (
-            <li
-              key={s.id}
-              style={{
-                border: "1px solid #343434",
-                borderRadius: 8,
-                padding: 12,
-              }}
-            >
-              <div
+          {items.map((s) => {
+            // Determine which event slug to use for the screen link:
+            const chosenEvent =
+              (eventFilter && allEvents.find((ev) => ev.id === eventFilter)) ||
+              (s.event_id && allEvents.find((ev) => ev.id === s.event_id)) ||
+              null;
+            const screenHref =
+              s.fileUrl && chosenEvent
+                ? `/events/${encodeURIComponent(chosenEvent.slug)}/screen?v=${encodeURIComponent(
+                    s.fileUrl
+                  )}`
+                : null;
+
+            return (
+              <li
+                key={s.id}
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 12,
+                  border: "1px solid #343434",
+                  borderRadius: 8,
+                  padding: 12,
                 }}
               >
-                <div>
-                  <strong>{s.title || s.file_path || s.id}</strong>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    {new Date(s.created_at).toLocaleString()}
-                    {s.status ? ` · ${s.status}` : ""}
-                  </div>
-                    {s.description ? (
-                    <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-                      {s.description}
-                    </p>
-                  ) : null}
-                  <div
-                    style={{
-                      fontSize: 11,
-                      opacity: 0.6,
-                      marginTop: 4,
-                    }}
-                  >
-                    bucket: {s.bucketUsed || "unknown"} · path:{" "}
-                    {s.file_path || "none"}
-                    {s.urlErr ? ` · url error: ${s.urlErr}` : ""}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                  <form action={setStatus}>
-                    <input type="hidden" name="id" value={s.id} />
-                    <input type="hidden" name="status" value="approved" />
-                    <button type="submit" style={{ fontSize: 12 }}>Approve</button>
-                  </form>
-                  <form action={setStatus}>
-                    <input type="hidden" name="id" value={s.id} />
-                    <input type="hidden" name="status" value="archived" />
-                    <button type="submit" style={{ fontSize: 12 }}>Archive</button>
-                  </form>
-                  <form action={setStatus}>
-                    <input type="hidden" name="id" value={s.id} />
-                    <input type="hidden" name="status" value="pending" />
-                    <button type="submit" style={{ fontSize: 12 }}>Pending</button>
-                  </form>
-                </div>
-              </div>
-
-              {/* Preview */}
-              <div style={{ marginTop: 12 }}>
-                {s.fileUrl ? (
-                  <>
-                    {s.uiType === "video" && (
-                      <video
-                        controls
-                        preload="metadata"
-                        style={{ maxWidth: "100%", borderRadius: 6 }}
-                        src={s.fileUrl}
-                      />
-                    )}
-                    {s.uiType === "audio" && (
-                      <audio controls style={{ width: "100%" }} src={s.fileUrl} />
-                    )}
-                    {s.uiType === "image" && (
-                      <img
-                        alt={s.title || s.file_path || ""}
-                        style={{ maxWidth: "100%", borderRadius: 6 }}
-                        src={s.fileUrl}
-                      />
-                    )}
-                    {s.uiType === "file" && (
-                      <p style={{ fontSize: 12, opacity: 0.8 }}>
-                        Preview not supported in-browser; use Open file.
-                      </p>
-                    )}
-                    <div style={{ marginTop: 6 }}>
-                      <a href={s.fileUrl} target="_blank" rel="noreferrer">
-                        Open file
-                      </a>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: 12,
+                  }}
+                >
+                  <div>
+                    <strong>{s.title || s.file_path || s.id}</strong>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {new Date(s.created_at).toLocaleString()}
+                      {s.status ? ` · ${s.status}` : ""}
+                      {s.event_id
+                        ? ` · event #${s.event_id}`
+                        : ""}
                     </div>
-                  </>
-                ) : (
-                  <p style={{ fontSize: 12, color: "crimson" }}>
-                    File URL unavailable.
-                  </p>
-                )}
-              </div>
-            </li>
-          ))}
+                    {s.description ? (
+                      <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+                        {s.description}
+                      </p>
+                    ) : null}
+                    <div
+                      style={{
+                        fontSize: 11,
+                        opacity: 0.6,
+                        marginTop: 4,
+                      }}
+                    >
+                      bucket: {s.bucketUsed || "unknown"} · path: {s.file_path || "none"}
+                      {s.urlErr ? ` · url error: ${s.urlErr}` : ""}
+                    </div>
+                    {screenHref ? (
+                      <div style={{ marginTop: 6 }}>
+                        <a href={screenHref} target="_blank" rel="noreferrer">
+                          Screen page ↗
+                        </a>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
+                        Choose an event (above or in “Assign”) to enable the screen link.
+                      </div>
+                    )}
+                  </div>
+
+                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                    {/* Status buttons */}
+                    <form action={setStatus}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="status" value="approved" />
+                      <button type="submit" style={{ fontSize: 12 }}>Approve</button>
+                    </form>
+                    <form action={setStatus}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="status" value="archived" />
+                      <button type="submit" style={{ fontSize: 12 }}>Archive</button>
+                    </form>
+                    <form action={setStatus}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <input type="hidden" name="status" value="pending" />
+                      <button type="submit" style={{ fontSize: 12 }}>Pending</button>
+                    </form>
+
+                    {/* Assign to event */}
+                    <form action={assignEvent} style={{ display: "flex", gap: 6 }}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <select name="event_id" defaultValue={s.event_id ?? ""} style={{ fontSize: 12 }}>
+                        <option value="">No event</option>
+                        {allEvents.map((ev) => (
+                          <option key={ev.id} value={ev.id}>
+                            {ev.title || ev.slug} {ev.city ? `• ${ev.city}` : ""}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="submit" style={{ fontSize: 12 }}>Assign</button>
+                    </form>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div style={{ marginTop: 12 }}>
+                  {s.fileUrl ? (
+                    <>
+                      {s.uiType === "video" && (
+                        <video
+                          controls
+                          preload="metadata"
+                          style={{ maxWidth: "100%", borderRadius: 6 }}
+                          src={s.fileUrl}
+                        />
+                      )}
+                      {s.uiType === "audio" && (
+                        <audio controls style={{ width: "100%" }} src={s.fileUrl} />
+                      )}
+                      {s.uiType === "image" && (
+                        <img
+                          alt={s.title || s.file_path || ""}
+                          style={{ maxWidth: "100%", borderRadius: 6 }}
+                          src={s.fileUrl}
+                        />
+                      )}
+                      {s.uiType === "file" && (
+                        <p style={{ fontSize: 12, opacity: 0.8 }}>
+                          Preview not supported in-browser; use Open file.
+                        </p>
+                      )}
+                      <div style={{ marginTop: 6 }}>
+                        <a href={s.fileUrl} target="_blank" rel="noreferrer">
+                          Open file
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <p style={{ fontSize: 12, color: "crimson" }}>
+                      File URL unavailable.
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
