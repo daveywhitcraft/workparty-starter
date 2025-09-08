@@ -1,10 +1,20 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { createClient } from '@supabase/supabase-js';
 
 const MAX_SIZE_MB = 250; // 250 MB
 const ALLOWED_MIME = ['video/mp4']; // MP4 only
 
 type Stage = 'idle' | 'signing' | 'uploading' | 'confirming' | 'done' | 'error';
+
+type EventRow = {
+  id: number;           // matches events.id (bigint)
+  slug: string;
+  title: string | null;
+  city: string | null;
+  call_open_at: string | null;
+  call_close_at: string | null;
+};
 
 export default function SubmitPage() {
   const [title, setTitle] = useState('');
@@ -16,6 +26,42 @@ export default function SubmitPage() {
 
   const [stage, setStage] = useState<Stage>('idle');
   const [message, setMessage] = useState('');
+
+  // ---- NEW: event selection state ----
+  const [events, setEvents] = useState<EventRow[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(true);
+  const [eventId, setEventId] = useState<number | null>(null);
+
+  // client supabase (public anon) to fetch open events
+  const supabase = useMemo(() => {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+    const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+    return createClient(url, anon, { auth: { persistSession: false } });
+  }, []);
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        setEventsLoading(true);
+        const nowIso = new Date().toISOString();
+        const { data } = await supabase
+          .from('events')
+          .select('id, slug, title, city, call_open_at, call_close_at')
+          .lte('call_open_at', nowIso)
+          .gte('call_close_at', nowIso)
+          .order('call_close_at', { ascending: true });
+        const rows = (data as EventRow[]) || [];
+        if (!live) return;
+        setEvents(rows);
+        // auto-select if exactly one open event
+        if (rows.length === 1) setEventId(rows[0].id);
+      } finally {
+        if (live) setEventsLoading(false);
+      }
+    })();
+    return () => { live = false; };
+  }, [supabase]);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] || null;
@@ -38,6 +84,12 @@ export default function SubmitPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage('');
+
+    // If multiple events are open, require a choice.
+    if (events.length > 1 && !eventId) {
+      setMessage('Please choose which event you are submitting to.');
+      return;
+    }
 
     if (!title || !artistName || !city || !year || !runtime || !file) {
       setMessage('Please fill all fields and choose a valid file.');
@@ -78,7 +130,7 @@ export default function SubmitPage() {
         return;
       }
 
-      // 3) Save metadata
+      // 3) Save metadata (UNCHANGED, just adds event_id when known)
       setStage('confirming');
       const confirmResp = await fetch('/api/confirm-upload', {
         method: 'POST',
@@ -90,6 +142,8 @@ export default function SubmitPage() {
           year: Number(year),
           runtime,
           file_path: signJson.path,
+          // NEW: include event_id if we have one (server trigger still covers the fallback)
+          event_id: eventId ?? undefined,
         }),
       });
 
@@ -108,6 +162,7 @@ export default function SubmitPage() {
       setRuntime('');
       (document.getElementById('file-input') as HTMLInputElement).value = '';
       setFile(null);
+      // keep the event selection as-is so users can submit multiple times to same event
     } catch {
       setStage('error');
       setMessage('Submission problem.');
@@ -117,6 +172,31 @@ export default function SubmitPage() {
   return (
     <section className="p-6 max-w-xl">
       <h1 className="title mb-4">Submit your video</h1>
+
+      {/* NEW: Only shows if 2+ events are open. If 1 event is open, we auto-select it and hide UI. */}
+      {eventsLoading ? null : events.length > 1 ? (
+        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+          <label>
+            <b>Choose event *</b>
+          </label>
+          <select
+            value={eventId ?? ''}
+            onChange={(e) => setEventId(e.target.value ? Number(e.target.value) : null)}
+            style={{ display: 'block', marginTop: 8 }}
+            required
+          >
+            <option value="" disabled>Select an event</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>
+                {(ev.title || ev.slug) + (ev.city ? ` — ${ev.city}` : '')}
+              </option>
+            ))}
+          </select>
+          <p className="muted" style={{ marginTop: 8, fontSize: 12 }}>
+            (If only one call is open, it’s auto-selected.)
+          </p>
+        </div>
+      ) : null}
 
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
         <b>Rules</b>
