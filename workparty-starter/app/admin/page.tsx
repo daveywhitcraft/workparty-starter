@@ -97,18 +97,16 @@ export default async function AdminPage({ searchParams }: Props) {
     );
   }
 
-  // Create event: city and date are required, title is optional
+  // Create event: City + Date required; Name optional; slug auto-generated
   async function createEvent(formData: FormData) {
     "use server";
     const city = String(formData.get("city") || "").trim();
     const title = String(formData.get("title") || "").trim();
-    const date = String(formData.get("date") || "").trim(); // YYYY-MM-DD format
+    const date = String(formData.get("date") || "").trim(); // YYYY-MM-DD
     if (!city || !date) {
-      // City and date must be provided
       redirect("/admin");
       return;
     }
-    // Generate slug automatically: city lowercase + date without dashes (e.g. berlin-20250926)
     const slug =
       city.toLowerCase().replace(/\s+/g, "-") + "-" + date.replace(/-/g, "");
     const sb2 = createClient(
@@ -120,7 +118,7 @@ export default async function AdminPage({ searchParams }: Props) {
       slug,
       title: title || null,
       city,
-      start_at: date ? new Date(date).toISOString() : null,
+      start_at: new Date(date).toISOString(),
     });
     redirect("/admin");
   }
@@ -147,14 +145,14 @@ export default async function AdminPage({ searchParams }: Props) {
   }
 
   // ---------- Data ----------
-  // Fetch events for filter and assignment
+  // Events for filter and assignment
   const { data: evs } = await sb
     .from("events")
     .select("id, slug, city, title")
     .order("start_at", { ascending: false });
   const allEvents: EventRow[] = evs || [];
 
-  // Fetch submissions
+  // Submissions
   let q = sb.from("submissions").select("*").order("created_at", {
     ascending: false,
   });
@@ -189,17 +187,16 @@ export default async function AdminPage({ searchParams }: Props) {
         Boolean
       ) as string[];
       let bucket = candidates.find((n) => bucketNames.has(n)) || "";
-      if (!bucket && bucketList && bucketList.length)
-        bucket = bucketList[0].name;
+      if (!bucket && bucketList && bucketList.length) bucket = bucketList[0].name;
 
-      let signedUrl: string | null = null;
+      let fileUrl: string | null = null;
       let urlErr: string | null = null;
       if (bucket && s.file_path) {
         const { data: signed, error: e } = await sb.storage
           .from(bucket)
           .createSignedUrl(s.file_path, 60 * 60 * 12);
         if (e) urlErr = e.message;
-        else signedUrl = signed?.signedUrl || null;
+        else fileUrl = signed?.signedUrl || null;
       } else {
         urlErr = "missing bucket or path";
       }
@@ -208,7 +205,7 @@ export default async function AdminPage({ searchParams }: Props) {
         ...s,
         uiType: s.file_path ? guessType(s.file_path) : "file",
         bucketUsed: bucket,
-        fileUrl: signedUrl,
+        fileUrl,
         urlErr,
       };
     })
@@ -236,12 +233,12 @@ export default async function AdminPage({ searchParams }: Props) {
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Create New Event</h2>
         <form action={createEvent} method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input name="city" placeholder="City (e.g. Berlin)" required style={{ flex: "1 1 180px", padding: 6 }} />
-          <input name="title" placeholder="Event name or theme (optional)" style={{ flex: "2 1 260px", padding: 6 }} />
+          <input name="title" placeholder="Event name / theme (optional)" style={{ flex: "2 1 260px", padding: 6 }} />
           <input type="date" name="date" required style={{ flex: "0 1 180px", padding: 6 }} />
           <button type="submit" style={{ padding: "6px 12px" }}>Create event</button>
         </form>
         <p style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
-          The site will automatically generate a URL identifier from the city and date.
+          A URL slug is auto‑generated from city + date (e.g. <code>berlin-20250926</code>).
         </p>
       </section>
 
@@ -259,7 +256,7 @@ export default async function AdminPage({ searchParams }: Props) {
       </nav>
 
       {/* Event filter */}
-      <form method="get" style={{ marginTop: 12, marginBottom: 12 }}>
+      <form method="get" style={{ marginTop: 12, marginBottom: 8 }}>
         <input type="hidden" name="status" value={activeStatus} />
         <label style={{ fontSize: 14, marginRight: 8 }}>Event:</label>
         <select name="event" defaultValue={eventFilter ?? ""}>
@@ -273,6 +270,22 @@ export default async function AdminPage({ searchParams }: Props) {
         </select>
         <button type="submit" style={{ marginLeft: 8 }}>Apply</button>
       </form>
+
+      {/* Quick link to screening page for the selected event */}
+      {(() => {
+        const selected = eventFilter ? allEvents.find((ev) => ev.id === eventFilter) : null;
+        return selected ? (
+          <div style={{ margin: "4px 0 16px" }}>
+            <a
+              href={`/events/${encodeURIComponent(selected.slug)}/screen`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open screening page for {selected.city || selected.title} ↗
+            </a>
+          </div>
+        ) : null;
+      })()}
 
       {error ? (
         <p style={{ color: "crimson", marginTop: 12 }}>Error: {error.message}</p>
@@ -289,17 +302,15 @@ export default async function AdminPage({ searchParams }: Props) {
           }}
         >
           {items.map((s) => {
-            // Determine which event slug to use for the screen link
             const chosenEvent =
               (eventFilter && allEvents.find((ev) => ev.id === eventFilter)) ||
               (s.event_id && allEvents.find((ev) => ev.id === s.event_id)) ||
               null;
-            const screenHref =
-              s.fileUrl && chosenEvent
-                ? `/events/${encodeURIComponent(chosenEvent.slug)}/screen?v=${encodeURIComponent(
-                    s.fileUrl
-                  )}`
-                : null;
+
+            // Event-level screen link (plays ALL approved videos for the event)
+            const screenHref = chosenEvent
+              ? `/events/${encodeURIComponent(chosenEvent.slug)}/screen`
+              : null;
 
             return (
               <li
@@ -339,15 +350,16 @@ export default async function AdminPage({ searchParams }: Props) {
                       bucket: {s.bucketUsed || "unknown"} · path: {s.file_path || "none"}
                       {s.urlErr ? ` · url error: ${s.urlErr}` : ""}
                     </div>
+
                     {screenHref ? (
                       <div style={{ marginTop: 6 }}>
                         <a href={screenHref} target="_blank" rel="noreferrer">
-                          Screen page ↗
+                          Screen event page ↗
                         </a>
                       </div>
                     ) : (
                       <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                        Assign to an event or select one above to enable the screen link.
+                        Select or assign an event to enable the screening link.
                       </div>
                     )}
                   </div>
