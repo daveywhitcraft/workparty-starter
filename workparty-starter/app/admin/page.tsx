@@ -97,29 +97,31 @@ export default async function AdminPage({ searchParams }: Props) {
     );
   }
 
-  // Create event (slug, title, city, date)
+  // Create event: city and date are required, title is optional
   async function createEvent(formData: FormData) {
     "use server";
-    const slug = String(formData.get("slug") || "").trim();
-    const title = String(formData.get("title") || "").trim();
     const city = String(formData.get("city") || "").trim();
-    const date = String(formData.get("date") || "").trim();
-
-    if (slug && title) {
-      const sb2 = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-        process.env.SUPABASE_SERVICE_ROLE || "",
-        { auth: { persistSession: false } }
-      );
-      await sb2
-        .from("events")
-        .insert({
-          slug,
-          title,
-          city: city || null,
-          start_at: date ? new Date(date).toISOString() : null,
-        });
+    const title = String(formData.get("title") || "").trim();
+    const date = String(formData.get("date") || "").trim(); // YYYY-MM-DD format
+    if (!city || !date) {
+      // City and date must be provided
+      redirect("/admin");
+      return;
     }
+    // Generate slug automatically: city lowercase + date without dashes (e.g. berlin-20250926)
+    const slug =
+      city.toLowerCase().replace(/\s+/g, "-") + "-" + date.replace(/-/g, "");
+    const sb2 = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+      process.env.SUPABASE_SERVICE_ROLE || "",
+      { auth: { persistSession: false } }
+    );
+    await sb2.from("events").insert({
+      slug,
+      title: title || null,
+      city,
+      start_at: date ? new Date(date).toISOString() : null,
+    });
     redirect("/admin");
   }
 
@@ -129,7 +131,6 @@ export default async function AdminPage({ searchParams }: Props) {
     const id = String(formData.get("id") || "");
     const event_id_str = String(formData.get("event_id") || "");
     const event_id = event_id_str ? Number(event_id_str) : null;
-
     if (id) {
       const sb2 = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL || "",
@@ -234,12 +235,14 @@ export default async function AdminPage({ searchParams }: Props) {
       <section style={{ marginTop: 16, padding: 12, border: "1px solid #343434", borderRadius: 8 }}>
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Create New Event</h2>
         <form action={createEvent} method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input name="slug" placeholder="Slug (e.g. berlin-2025-09-26)" required style={{ flex: "1 1 180px", padding: 6 }} />
-          <input name="title" placeholder="Title (e.g. Berlin September 26)" required style={{ flex: "2 1 260px", padding: 6 }} />
-          <input name="city" placeholder="City (optional)" style={{ flex: "1 1 140px", padding: 6 }} />
-          <input type="date" name="date" style={{ flex: "0 1 180px", padding: 6 }} />
+          <input name="city" placeholder="City (e.g. Berlin)" required style={{ flex: "1 1 180px", padding: 6 }} />
+          <input name="title" placeholder="Event name or theme (optional)" style={{ flex: "2 1 260px", padding: 6 }} />
+          <input type="date" name="date" required style={{ flex: "0 1 180px", padding: 6 }} />
           <button type="submit" style={{ padding: "6px 12px" }}>Create event</button>
         </form>
+        <p style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
+          The site will automatically generate a URL identifier from the city and date.
+        </p>
       </section>
 
       {/* Status filter */}
@@ -263,7 +266,8 @@ export default async function AdminPage({ searchParams }: Props) {
           <option value="">All</option>
           {allEvents.map((ev) => (
             <option key={ev.id} value={ev.id}>
-              {ev.title || ev.slug} {ev.city ? `• ${ev.city}` : ""}
+              {ev.city ? ev.city + " · " : ""}
+              {ev.title || "Untitled"}
             </option>
           ))}
         </select>
@@ -285,7 +289,7 @@ export default async function AdminPage({ searchParams }: Props) {
           }}
         >
           {items.map((s) => {
-            // Determine which event slug to use for the screen link:
+            // Determine which event slug to use for the screen link
             const chosenEvent =
               (eventFilter && allEvents.find((ev) => ev.id === eventFilter)) ||
               (s.event_id && allEvents.find((ev) => ev.id === s.event_id)) ||
@@ -318,9 +322,7 @@ export default async function AdminPage({ searchParams }: Props) {
                     <div style={{ fontSize: 12, opacity: 0.7 }}>
                       {new Date(s.created_at).toLocaleString()}
                       {s.status ? ` · ${s.status}` : ""}
-                      {s.event_id
-                        ? ` · event #${s.event_id}`
-                        : ""}
+                      {s.event_id ? ` · event #${s.event_id}` : ""}
                     </div>
                     {s.description ? (
                       <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
@@ -345,7 +347,7 @@ export default async function AdminPage({ searchParams }: Props) {
                       </div>
                     ) : (
                       <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                        Choose an event (above or in “Assign”) to enable the screen link.
+                        Assign to an event or select one above to enable the screen link.
                       </div>
                     )}
                   </div>
@@ -375,7 +377,8 @@ export default async function AdminPage({ searchParams }: Props) {
                         <option value="">No event</option>
                         {allEvents.map((ev) => (
                           <option key={ev.id} value={ev.id}>
-                            {ev.title || ev.slug} {ev.city ? `• ${ev.city}` : ""}
+                            {ev.city ? ev.city + " · " : ""}
+                            {ev.title || "Untitled"}
                           </option>
                         ))}
                       </select>
