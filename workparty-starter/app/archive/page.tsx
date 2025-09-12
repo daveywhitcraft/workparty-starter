@@ -33,7 +33,7 @@ export default async function ArchivePage() {
     <section style={{ padding: "2rem", maxWidth: 900 }}>
       <h1>Archive Index</h1>
       <p style={{ opacity: 0.75, marginTop: 6 }}>
-        Listing only. Playback lives on the Screening page during events.
+        
       </p>
 
       {error ? (
