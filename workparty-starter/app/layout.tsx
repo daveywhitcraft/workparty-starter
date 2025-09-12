@@ -9,7 +9,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div><Link href="/">WORK.PARTY</Link></div>
           <nav className="row" style={{gap:16}}>
             <Link href="/submit">Submit</Link>
-            <Link href="/screening">Screening</Link>
+          
             <Link href="/archive">Archive</Link>
             <Link href="/about">About</Link>
             <Link href="/admin">Admin</Link>
