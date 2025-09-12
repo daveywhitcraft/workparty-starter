@@ -2,11 +2,11 @@ export default function Home() {
   return (
     <section>
       <h1 className="title">WORK.PARTY</h1>
-      <p>Submit. Curate. Screen in the city. Archive as an index.</p>
+      <p>Monthly video evenings anti-curated by WORK.PARTY</p>
       <ul>
-        <li>Submissions live on this site.</li>
-        <li>Current Season streams here during the event.</li>
-        <li>Archive lists artists and works from previous seasons.</li>
+        <li>Submit to our city-specific monthly screenings here.</li>
+        <li>Current edition streams here during the event.</li>
+        <li>Archive lists artists and works from previous editions.</li>
       </ul>
     </section>
   );
