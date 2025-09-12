@@ -6,14 +6,6 @@ import { createClient } from "@supabase/supabase-js";
 type Submission = {
   id: string;
   created_at: string | null;
-  status: string | nullexport const runtime = "nodejs";
-export const revalidate = 0;
-
-import { createClient } from "@supabase/supabase-js";
-
-type Submission = {
-  id: string;
-  created_at: string | null;
   status: string | null;
   title: string | null;
   artist: string | null;
@@ -21,7 +13,7 @@ type Submission = {
   submitter_name: string | null;
   year: number | string | null;
   city: string | null;
-  event_id: number; // guaranteed non-null by query
+  event_id: number; // non-null because we filter for assigned
 };
 
 type EventRow = {
@@ -43,7 +35,7 @@ export default async function ArchivePage() {
     .from("submissions")
     .select("*")
     .eq("status", "approved")
-    .not("event_id", "is", null)      // assigned only
+    .not("event_id", "is", null)
     .order("created_at", { ascending: false });
 
   if (subErr) {
@@ -65,8 +57,8 @@ export default async function ArchivePage() {
     );
   }
 
-  // 2) Load only the events referenced by those submissions; newest events first
-  const eventIds = Array.from(new Set(rows.map(r => r.event_id)));
+  // 2) Load only referenced events; newest events first
+  const eventIds = Array.from(new Set(rows.map((r) => r.event_id)));
   const { data: evs, error: evErr } = await sb
     .from("events")
     .select("id, slug, city, title, start_at")
@@ -83,7 +75,7 @@ export default async function ArchivePage() {
   }
 
   const events: EventRow[] = evs || [];
-  const eventsById = new Map(events.map(e => [e.id, e]));
+  const eventsById = new Map(events.map((e) => [e.id, e]));
 
   // 3) Group submissions by event_id (items newest → oldest inside each group)
   const byEvent = new Map<number, Submission[]>();
@@ -100,18 +92,22 @@ export default async function ArchivePage() {
     });
   }
 
-  // 4) Build sections using events order; ignore any events without items
-  const sections = events
-    .map(ev => {
-      const items = byEvent.get(ev.id) || [];
-      if (items.length === 0) return null;
-      const header = [ev.city, ev.title || "Untitled"].filter(Boolean).join(" · ");
-      return { key: `ev-${ev.id}`, header, slug: ev.slug, items };
-    })
-    .filter(Boolean) as Array<{ key: string; header: string; slug?: string; items: Submission[] }>;
+  // 4) Build sections using events order; include any unknown event_id as fallback
+  const sections =
+    events
+      .map((ev) => {
+        const items = byEvent.get(ev.id) || [];
+        if (items.length === 0) return null;
+        const header = [ev.city, ev.title || "Untitled"].filter(Boolean).join(" · ");
+        return { key: `ev-${ev.id}`, header, slug: ev.slug, items };
+      })
+      .filter(Boolean) as Array<{
+      key: string;
+      header: string;
+      slug?: string;
+      items: Submission[];
+    }>;
 
-  // If for some reason an event_id slipped through that isn't in `events`,
-  // render a simple fallback for those:
   for (const [eventId, items] of byEvent) {
     if (!eventsById.has(eventId)) {
       sections.push({ key: `ev-${eventId}`, header: `Event #${eventId}`, items });
@@ -189,150 +185,6 @@ export default async function ArchivePage() {
           </ul>
         </div>
       ))}
-    </section>
-  );
-}
-
-  title: string | null;
-  artist: string | null;
-  artist_name: string | null;
-  submitter_name: string | null;
-  year: number | string | null;
-  city: string | null;
-  event_id: number | null;
-};
-
-type EventRow = {
-  id: number;
-  slug: string;
-  city: string | null;
-  title: string | null;
-  start_at?: string | null;
-};
-
-export default async function ArchivePage() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const sb = createClient(url, anon, { auth: { persistSession: false } });
-
-  // 1) Get events newest to oldest
-  const { data: evs, error: evErr } = await sb
-    .from("events")
-    .select("id, slug, city, title, start_at")
-    .order("start_at", { ascending: false });
-
-  const events: EventRow[] = evs || [];
-  const eventsById = new Map(events.map((e) => [e.id, e]));
-
-  // 2) Get approved submissions newest to oldest
-  const { data: subs, error: subErr } = await sb
-    .from("submissions")
-    .select("*")
-    .eq("status", "approved")
-    .order("created_at", { ascending: false });
-
-  const rows: Submission[] = subs || [];
-
-  // 3) Group submissions by event_id
-  const groups = new Map<number | "unassigned", Submission[]>();
-  for (const s of rows) {
-    const key = s.event_id ?? "unassigned";
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key)!.push(s);
-  }
-
-  // 4) Build ordered list of event sections
-  //    a) all real events in events order
-  //    b) unassigned at the end if any
-  const orderedSections: Array<{ header: string; slug?: string; items: Submission[] }> = [];
-
-  for (const ev of events) {
-    const items = groups.get(ev.id) || [];
-    if (items.length === 0) continue;
-
-    const headerParts = [];
-    if (ev.city) headerParts.push(ev.city);
-    headerParts.push(ev.title || "Untitled");
-    const header = headerParts.join(" · ");
-
-    orderedSections.push({ header, slug: ev.slug, items });
-  }
-
-  if (groups.has("unassigned")) {
-    const items = groups.get("unassigned") || [];
-    if (items.length > 0) {
-      orderedSections.push({ header: "Unassigned", items });
-    }
-  }
-
-  return (
-    <section style={{ padding: "2rem", maxWidth: 900 }}>
-      <h1>Archive</h1>
-
-      {(evErr || subErr) && (
-        <p style={{ color: "crimson", marginTop: 12 }}>
-          {evErr?.message || subErr?.message}
-        </p>
-      )}
-
-      {rows.length === 0 ? (
-        <p style={{ marginTop: 12 }}>No approved items yet.</p>
-      ) : (
-        orderedSections.map((section) => (
-          <div key={section.header} style={{ marginTop: 28 }}>
-            <h2 style={{ margin: "0 0 4px 0" }}>{section.header}</h2>
-            {section.slug && (
-              <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 8 }}>
-                <a href={`/events/${encodeURIComponent(section.slug)}/screen`} target="_blank" rel="noreferrer">
-                  Screen event page ↗
-                </a>
-              </div>
-            )}
-            <ul
-              style={{
-                margin: 0,
-                padding: 0,
-                listStyle: "none",
-                display: "grid",
-                gap: 10,
-              }}
-            >
-              {section.items.map((r) => {
-                const artist = r.artist || r.artist_name || r.submitter_name || "Unknown artist";
-                const title = r.title || "Untitled";
-                const year =
-                  typeof r.year === "number" || typeof r.year === "string"
-                    ? String(r.year)
-                    : r.created_at
-                    ? new Date(r.created_at).getFullYear().toString()
-                    : "";
-                const city = r.city || "";
-                const meta = [year ? `(${year})` : "", city ? `· ${city}` : ""]
-                  .join(" ")
-                  .trim();
-
-                return (
-                  <li
-                    key={r.id}
-                    style={{
-                      border: "1px solid #343434",
-                      borderRadius: 8,
-                      padding: "10px 12px",
-                    }}
-                  >
-                    <div>
-                      <strong>{artist}</strong> — {title} {meta && <span>{meta}</span>}
-                    </div>
-                    <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                      {r.created_at ? new Date(r.created_at).toLocaleString() : ""}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        ))
-      )}
     </section>
   );
 }
