@@ -19,35 +19,30 @@ export default async function ArchivePage() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const srv = process.env.SUPABASE_SERVICE_ROLE || "";
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const sb = createClient(url, srv || anon, { auth: { persistSession: false } });
+
+  // Use anon for public read; service role is only needed for privileged ops
+  const sb = createClient(url, anon || srv, { auth: { persistSession: false } });
 
   const { data, error } = await sb
     .from("submissions")
     .select("*")
-    .in("status", ["approved", "archived"])
-    .order("created_at", { ascending: false });
+    .eq("status", "approved")                 // <= only approved
+    .order("created_at", { ascending: false }); // newest → oldest
 
   const rows: Row[] = (data as Row[]) || [];
 
   return (
     <section style={{ padding: "2rem", maxWidth: 900 }}>
       <h1>Archive Index</h1>
-      <p style={{ opacity: 0.75, marginTop: 6 }}>
-        
-      </p>
 
       {error ? (
         <p style={{ color: "crimson", marginTop: 12 }}>Error: {error.message}</p>
       ) : rows.length === 0 ? (
-        <p style={{ marginTop: 12 }}>No archived items yet.</p>
+        <p style={{ marginTop: 12 }}>No approved items yet.</p>
       ) : (
         <ul style={{ marginTop: 16, padding: 0, listStyle: "none", display: "grid", gap: 10 }}>
           {rows.map((r) => {
-            const artist =
-              r.artist ||
-              r.artist_name ||
-              r.submitter_name ||
-              "Unknown artist";
+            const artist = r.artist || r.artist_name || r.submitter_name || "Unknown artist";
             const title = r.title || "Untitled";
             const year =
               typeof r.year === "number" || typeof r.year === "string"
@@ -56,10 +51,7 @@ export default async function ArchivePage() {
                 ? new Date(r.created_at).getFullYear().toString()
                 : "";
             const city = r.city || "";
-            const meta =
-              [year ? `(${year})` : "", city ? `· ${city}` : ""]
-                .join(" ")
-                .trim();
+            const meta = [year ? `(${year})` : "", city ? `· ${city}` : ""].join(" ").trim();
 
             return (
               <li
@@ -72,9 +64,7 @@ export default async function ArchivePage() {
               >
                 <div>
                   <strong>{artist}</strong> — {title} {meta && <span>{meta}</span>}
-                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
-                    {r.status}
-                  </div>
+                  {/* Status hidden since everything here is approved */}
                 </div>
               </li>
             );
