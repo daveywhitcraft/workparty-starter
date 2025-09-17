@@ -27,8 +27,7 @@ export default function SubmitPage() {
   const [stage, setStage] = useState<Stage>('idle');
   const [message, setMessage] = useState('');
 
-WE ACCEPT ALL SUBMISSIONS
-  THIS IS A COLLECTIVE EVENT KEEP THAT IN MIND WHEN CHOOSING LENGTH OF VIDEO
+
   
   // ---- NEW: event selection state ----
   const [events, setEvents] = useState<EventRow[]>([]);
