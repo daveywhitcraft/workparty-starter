@@ -13,6 +13,21 @@ export default function SubmitPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
+  function parseMmSs(mmss: string) {
+    const m = mmss.match(/^(\d{1,3}):([0-5]\d)$/);
+    if (!m) return null;
+    const minutes = parseInt(m[1], 10);
+    const seconds = parseInt(m[2], 10);
+    const totalSeconds = minutes * 60 + seconds;
+    const runtimeMinutesRounded = minutes + (seconds >= 30 ? 1 : 0); // for legacy "minutes" field
+    return {
+      mmss,
+      totalSeconds,
+      minutesRounded: runtimeMinutesRounded,
+      minutesExact: +(totalSeconds / 60).toFixed(2),
+    };
+  }
+
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (busy) return;
@@ -27,20 +42,21 @@ export default function SubmitPage() {
       const artist_name = String(data.get('artist_name') || '');
       const city = String(data.get('city') || '');
       const year = Number(data.get('year') || 0);
-      const runtime = Number(data.get('runtime') || 0);
+      const runtimeStr = String(data.get('runtime') || '');
       const file = data.get('file') as File | null;
 
-      if (!title || !artist_name || !city || !year || !runtime || !file) {
-        setMsg('Please fill all fields and choose a file.');
+      const parsed = parseMmSs(runtimeStr);
+      if (!title || !artist_name || !city || !year || !runtimeStr || !file || !parsed) {
+        setMsg('Please fill every field. Runtime must look like 13:40.');
         setBusy(false);
         return;
       }
 
-      // Path for Storage
+      // Storage path
       const safeName = file.name.replace(/\s+/g, '_');
       const path = `submissions/${Date.now()}_${safeName}`;
 
-      // 1) Upload to Supabase Storage bucket "videos"
+      // Upload to Supabase Storage
       const { error: upErr } = await supabase
         .storage
         .from('videos')
@@ -55,7 +71,7 @@ export default function SubmitPage() {
         return;
       }
 
-      // 2) Tell the server about the new submission
+      // Save DB row through your existing API
       const resp = await fetch('/api/confirm-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -64,7 +80,12 @@ export default function SubmitPage() {
           artist_name,
           city,
           year,
-          runtime,
+          // keep the original "runtime" numeric minutes field for compatibility
+          runtime: parsed.minutesRounded,
+          // send richer values too, in case the API wants them
+          runtime_seconds: parsed.totalSeconds,
+          runtime_mmss: parsed.mmss,
+          runtime_minutes_exact: parsed.minutesExact,
           storage_bucket: 'videos',
           file_path: path,
           status: 'pending',
@@ -96,7 +117,7 @@ export default function SubmitPage() {
         action="/api/submit"
         method="post"
         encType="multipart/form-data"
-        onSubmit={onSubmit} // added
+        onSubmit={onSubmit}
       >
         <div>
           <label htmlFor="title" className="block mb-1">Title *</label>
@@ -144,14 +165,16 @@ export default function SubmitPage() {
         </div>
 
         <div>
-          <label htmlFor="runtime" className="block mb-1">Runtime (min) *</label>
+          <label htmlFor="runtime" className="block mb-1">Runtime (mm:ss) *</label>
           <input
             id="runtime"
             name="runtime"
-            type="number"
+            inputMode="numeric"
+            pattern="^\d{1,3}:[0-5]\d$"
             required
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
-            placeholder="12"
+            placeholder="13:40"
+            title="Use mm:ss, for example 07:30 or 13:40"
           />
         </div>
 
