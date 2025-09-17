@@ -5,12 +5,7 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { supabaseService } from '@/lib/supabaseServer';
 
-type EventRow = {
-  id: number;
-  title: string | null;
-  slug: string;
-};
-
+type EventRow = { id: number; title: string | null; slug: string };
 type Submission = {
   id: string;
   created_at: string | null;
@@ -20,18 +15,21 @@ type Submission = {
   year: number | null;
   runtime: number | null;
   runtime_mmss?: string | null;
-  status: string | null;           // 'pending' | 'approved' | 'archived'
+  status: string | null;           // pending | approved | archived
   storage_bucket: string | null;   // usually 'videos'
   file_path: string | null;
   event_id: number | null;
   order_index?: number | null;
 };
 
-export default async function AdminPage() {
-  // ---- auth gate (same cookie your login uses) ----
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams?: { err?: string };
+}) {
   const authed = cookies().get('wp_admin_auth')?.value === '1';
 
-  // ----- server actions: login / logout -----
+  // ---------- actions ----------
   async function login(formData: FormData) {
     'use server';
     const pass = String(formData.get('password') || '');
@@ -39,14 +37,30 @@ export default async function AdminPage() {
       process.env.WP_ADMIN_PASSWORD ||
       process.env.ADMIN_PASSWORD ||
       '';
-    if (pass && expected && pass === expected) {
+
+    // if no password is configured yet, don't lock you out
+    if (!expected) {
       cookies().set('wp_admin_auth', '1', {
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
-        maxAge: 60 * 60 * 8, // 8h
+        secure: true,
+        maxAge: 60 * 60 * 8,
       });
+      redirect('/admin');
     }
+
+    if (pass !== expected) {
+      redirect('/admin?err=1'); // show "Wrong password" message
+    }
+
+    cookies().set('wp_admin_auth', '1', {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: true,
+      maxAge: 60 * 60 * 8,
+    });
     redirect('/admin');
   }
 
@@ -56,11 +70,19 @@ export default async function AdminPage() {
     redirect('/admin');
   }
 
-  // show login page if not authed
+  // ---------- show login if not authed ----------
   if (!authed) {
+    const wrong = searchParams?.err === '1';
     return (
       <main className="px-6 pt-28 pb-20 max-w-xl">
         <h1 className="text-3xl font-semibold mb-6">Admin</h1>
+
+        {wrong && (
+          <div className="mb-4 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm">
+            Wrong password. Try again.
+          </div>
+        )}
+
         <form action={login} className="space-y-4">
           <div>
             <label htmlFor="password" className="block mb-1">Password</label>
@@ -68,12 +90,15 @@ export default async function AdminPage() {
               id="password"
               name="password"
               type="password"
+              required
               className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
               placeholder="Enter password"
-              required
             />
           </div>
-          <button className="rounded border border-white/30 px-4 py-2 hover:bg-white/10">
+          <button
+            type="submit"
+            className="rounded border border-white/30 px-4 py-2 hover:bg-white/10"
+          >
             Log in
           </button>
         </form>
@@ -81,7 +106,7 @@ export default async function AdminPage() {
     );
   }
 
-  // ---- data fetch (service role client) ----
+  // ---------- data ----------
   const db = supabaseService();
 
   const { data: eventsRaw } = await db
@@ -101,7 +126,7 @@ export default async function AdminPage() {
     .returns<Submission[]>();
   const submissions: Submission[] = submissionsRaw ?? [];
 
-  // ---- per-row actions ----
+  // ---------- row actions ----------
   async function setStatus(formData: FormData) {
     'use server';
     const id = String(formData.get('id') || '');
@@ -135,13 +160,17 @@ export default async function AdminPage() {
   const fileUrl = (row: Submission) =>
     row.file_path ? `/api/public-url?path=${encodeURIComponent(row.file_path)}` : '';
 
+  // ---------- UI ----------
   return (
     <main className="px-6 pt-28 pb-20 space-y-12">
       {/* header + logout */}
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-semibold">Admin</h1>
         <form action={logout}>
-          <button className="rounded border border-white/30 px-3 py-1.5 hover:bg-white/10">
+          <button
+            type="submit"
+            className="rounded border border-white/30 px-3 py-1.5 hover:bg-white/10"
+          >
             Log out
           </button>
         </form>
@@ -171,18 +200,15 @@ export default async function AdminPage() {
               {submissions.map((row) => {
                 const runtimeLabel =
                   row.runtime_mmss || (row.runtime != null ? `${row.runtime} min` : '');
-                const created =
-                  row.created_at ? new Date(row.created_at).toLocaleString() : '';
+                const created = row.created_at ? new Date(row.created_at).toLocaleString() : '';
                 return (
                   <tr key={row.id}>
-                    {/* Title + meta */}
                     <td className="px-3 py-2">
                       <div className="font-medium">{row.title}</div>
                       <div className="text-xs opacity-70">
                         #{row.order_index ?? ''} · {created}
                       </div>
                     </td>
-
                     <td className="px-3 py-2">{row.artist_name}</td>
                     <td className="px-3 py-2">{row.city}</td>
                     <td className="px-3 py-2">{row.year ?? ''}</td>
@@ -201,13 +227,13 @@ export default async function AdminPage() {
                           <option value="approved">approved</option>
                           <option value="archived">archived</option>
                         </select>
-                        <button className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
+                        <button type="submit" className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
                           Set
                         </button>
                       </form>
                     </td>
 
-                    {/* Event assignment */}
+                    {/* Event */}
                     <td className="px-3 py-2">
                       <form action={setEvent} className="flex items-center gap-2">
                         <input type="hidden" name="id" value={row.id} />
@@ -223,13 +249,13 @@ export default async function AdminPage() {
                             </option>
                           ))}
                         </select>
-                        <button className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
+                        <button type="submit" className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
                           Set
                         </button>
                       </form>
                     </td>
 
-                    {/* Order index editor */}
+                    {/* Order */}
                     <td className="px-3 py-2">
                       <form action={setOrderIndex} className="flex items-center gap-2">
                         <input type="hidden" name="id" value={row.id} />
@@ -241,18 +267,16 @@ export default async function AdminPage() {
                           placeholder="—"
                           step={1}
                         />
-                        <button className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
+                        <button type="submit" className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
                           Set
                         </button>
                       </form>
                     </td>
 
-                    {/* File link */}
+                    {/* File */}
                     <td className="px-3 py-2">
                       {row.file_path ? (
-                        <a href={fileUrl(row)} target="_blank" className="underline">
-                          open
-                        </a>
+                        <a href={fileUrl(row)} target="_blank" className="underline">open</a>
                       ) : (
                         ''
                       )}
@@ -264,14 +288,14 @@ export default async function AdminPage() {
                         <form action={setStatus}>
                           <input type="hidden" name="id" value={row.id} />
                           <input type="hidden" name="status" value="approved" />
-                          <button className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
+                          <button type="submit" className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
                             Approve
                           </button>
                         </form>
                         <form action={setStatus}>
                           <input type="hidden" name="id" value={row.id} />
                           <input type="hidden" name="status" value="archived" />
-                          <button className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
+                          <button type="submit" className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
                             Archive
                           </button>
                         </form>
@@ -292,7 +316,7 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      {/* Events list (read-only) */}
+      {/* Events (read-only) */}
       <section className="max-w-3xl">
         <h2 className="text-xl font-semibold mb-4">Events</h2>
         <div className="divide-y divide-white/10 border border-white/10 rounded">
