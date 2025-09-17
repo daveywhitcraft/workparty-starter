@@ -139,7 +139,8 @@ export default async function ScreenPage({ params }: PageProps) {
     );
   }
 
-  // Public window: event day ±1 (UTC)
+ // Public window logic (commented out so only admins can view)
+  /* 
   const todayKey = ymdUTC(new Date());
   const eventKey = evData.start_at ? new Date(evData.start_at).toISOString().slice(0, 10) : "";
   const publicAllowed = !!eventKey && Math.abs(dayNumber(todayKey) - dayNumber(eventKey)) <= 1;
@@ -161,7 +162,20 @@ export default async function ScreenPage({ params }: PageProps) {
       </div>
     );
   }
-
+ */
+  // Simple: block everyone except admin
+  if (!authed) {
+    return (
+      <div style={{ padding: 24, maxWidth: 520, color: "white", background: "black" }}>
+        <h1 style={{ margin: 0 }}>Screening Locked</h1>
+        <p style={{ marginTop: 8 }}>Only admins may unlock with the password.</p>
+        <form action={login} style={{ display: "flex", gap: 8, marginTop: 12 }}>
+          <input name="password" type="password" placeholder="Admin password" style={{ padding: 10, flex: 1 }} required />
+          <button type="submit" style={{ padding: "10px 12px" }}>Unlock</button>
+        </form>
+      </div>
+    );
+  }
   // Fetch approved submissions for this event (screening order = oldest → newest)
   const { data: subs, error: subErr } = await sb
     .from("submissions")
