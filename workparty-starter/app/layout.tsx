@@ -14,27 +14,27 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen text-white">
-        {/* Full-page background */}
+        {/* Background image */}
         <div
           className="fixed inset-0 z-0 bg-cover bg-center"
           style={{ backgroundImage: "url('/bg.jpg')" }}
         />
 
-        {/* Top nav */}
-        <header className="relative z-30">
-          <nav className="mx-auto max-w-6xl px-6 py-6 flex items-center justify-between">
+        {/* Fixed top navigation */}
+        <header className="fixed top-0 left-0 right-0 z-30">
+          <nav className="flex items-center justify-between px-6 py-6">
             <a href="/" className="underline text-lg">WORK.PARTY</a>
-            <ul className="flex items-center gap-6">
-              <li><a href="/submit" className="underline">Submit</a></li>
-              <li><a href="/archive" className="underline">Archive</a></li>
-              <li><a href="/about" className="underline">About</a></li>
-              <li><a href="/admin" className="underline">Admin</a></li>
-            </ul>
+            <div className="flex gap-6">
+              <a href="/submit" className="underline">Submit</a>
+              <a href="/archive" className="underline">Archive</a>
+              <a href="/about" className="underline">About</a>
+              <a href="/admin" className="underline">Admin</a>
+            </div>
           </nav>
         </header>
 
-        {/* Blank page content */}
-        <main className="relative z-20">
+        {/* Page content, padded so it doesn't hide under nav */}
+        <main className="relative z-20 pt-24">
           {children}
         </main>
       </body>
