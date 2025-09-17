@@ -1,14 +1,12 @@
-// app/api/signed-upload/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// ---- Adjust these as you like ----
-const MAX_SIZE_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB
-const ALLOWED_MIME = new Set(["video/mp4"]);   // MP4 only
-const DEFAULT_BUCKET = "videos";               // use your bucket name
+const MAX_SIZE_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB in bytes
+const MAX_SIZE_LABEL = "3 GB";
+const ALLOWED_MIME = new Set(["video/mp4"]);
+const DEFAULT_BUCKET = "videos";
 
 function safeName(name: string) {
-  // strip path chars and squash spaces
   return name.replace(/[^\w.\-()+\[\]{}@~]/g, "_");
 }
 
@@ -36,7 +34,7 @@ export async function POST(req: Request) {
 
     if (size > MAX_SIZE_BYTES) {
       return NextResponse.json(
-        { error: `File too large. Max ${Math.round(MAX_SIZE_BYTES / (1024 * 1024))} MB.` },
+        { error: `File too large. Max ${MAX_SIZE_LABEL}.` },
         { status: 400 }
       );
     }
@@ -52,12 +50,10 @@ export async function POST(req: Request) {
 
     const supabase = createClient(url, srv, { auth: { persistSession: false } });
 
-    // Build a unique storage path
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+    const today = new Date().toISOString().slice(0, 10);
     const rnd = crypto.randomUUID();
     const path = `${today}/${rnd}-${safeName(filename)}`;
 
-    // Create a signed upload URL for direct-from-browser upload
     const { data, error } = await supabase.storage
       .from(DEFAULT_BUCKET)
       .createSignedUploadUrl(path);
@@ -69,13 +65,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // Return the PUT/POSTable URL. Your current client uses `fetch(uploadUrl, { method: 'PUT', ... })`.
-    // If you ever switch to supabase-js on the client, you can use:
-    //   supabase.storage.from(bucket).uploadToSignedUrl(path, file, { token: data.token, contentType })
     return NextResponse.json({
       uploadUrl: data.signedUrl,
-      token: data.token,     // provided in case you switch to uploadToSignedUrl later
-      path,                  // saved later by /api/confirm-upload
+      token: data.token,
+      path,
       bucket: DEFAULT_BUCKET
     });
   } catch (e: any) {
