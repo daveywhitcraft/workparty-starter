@@ -25,7 +25,7 @@ function getAdminClient() {
 export default async function AdminPage() {
   const authed = cookies().get('wp_admin_auth')?.value === '1';
 
-  // -------- login --------
+  // --- login ---
   async function login(formData: FormData) {
     'use server';
     const pass = String(formData.get('password') || '');
@@ -44,7 +44,7 @@ export default async function AdminPage() {
     redirect('/admin');
   }
 
-  // -------- create event --------
+  // --- create event ---
   async function createEvent(formData: FormData) {
     'use server';
     const supabase = getAdminClient();
@@ -54,6 +54,10 @@ export default async function AdminPage() {
 
     if (!cityRaw || !dateRaw) redirect('/admin?err=missing');
 
+    // Title: "City DD MM YYYY"   Slug: "city-yyyymmdd"
+    const [y, m, d] = dateRaw.split('-'); // e.g. 2025-08-22
+    const ymd = `${y}${m}${d}`;
+
     const cityTitle = cityRaw
       .toLowerCase()
       .replace(/\s+/g, ' ')
@@ -62,8 +66,7 @@ export default async function AdminPage() {
       .join(' ')
       .trim() || 'City';
 
-    const ymd = dateRaw.replaceAll('-', ''); // 20250926
-    const title = `${cityTitle} ${ymd}`;
+    const title = `${cityTitle} ${d} ${m} ${y}`;
     const slug = `${cityRaw.toLowerCase().replace(/\s+/g, '-')}-${ymd}`;
 
     await supabase.from('events').insert([{ slug, city: cityTitle, title }]);
@@ -139,7 +142,7 @@ export default async function AdminPage() {
         </form>
       </section>
 
-      {/* Events — single line, title only */}
+      {/* Events — single line per event, title only */}
       <section className="max-w-3xl">
         <h2 className="text-xl font-semibold mb-4">Events</h2>
         <div className="divide-y divide-white/10 border border-white/10 rounded">
