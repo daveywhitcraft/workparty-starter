@@ -1,445 +1,173 @@
-export const runtime = "nodejs";
+// app/admin/page.tsx
+export const runtime = 'nodejs';
 
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
-
-type Submission = {
-  id: string;
-  created_at: string;
-  title?: string | null;
-  description?: string | null;
-  file_path?: string | null;
-  storage_bucket?: string | null;
-  status?: string | null;
-  event_id?: number | null;
-};
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 
 type EventRow = {
   id: number;
   slug: string;
-  city?: string | null;
-  title?: string | null;
+  city: string | null;
+  title: string | null;
 };
 
-type Props = { searchParams?: { status?: string; event?: string } };
+function getAdminClient() {
+  const url =
+    process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SERVICE_ROLE ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    '';
+  return createClient(url, key);
+}
 
-export default async function AdminPage({ searchParams }: Props) {
-  const authed = cookies().get("wp_admin_auth")?.value === "1";
-  const activeStatus = (searchParams?.status || "all").toLowerCase();
-  const eventFilter = searchParams?.event ? Number(searchParams.event) : null;
+export default async function AdminPage() {
+  const authed = cookies().get('wp_admin_auth')?.value === '1';
 
-  // ---------- Auth ----------
+  // -------- login action --------
   async function login(formData: FormData) {
-    "use server";
-    const pwd = String(formData.get("password") || "");
-    if (pwd === process.env.ADMIN_PASS) {
-      cookies().set("wp_admin_auth", "1", {
+    'use server';
+    const pass = String(formData.get('password') || '');
+    const expected =
+      process.env.WP_ADMIN_PASSWORD ||
+      process.env.ADMIN_PASSWORD ||
+      '';
+    if (pass === expected && expected) {
+      cookies().set('wp_admin_auth', '1', {
+        path: '/',
         httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 7,
+        sameSite: 'lax',
+        maxAge: 60 * 60 * 8,
       });
     }
-    redirect("/admin");
+    redirect('/admin');
   }
 
-  async function logout() {
-    "use server";
-    cookies().delete("wp_admin_auth");
-    redirect("/admin");
+  // -------- create event action --------
+  async function createEvent(formData: FormData) {
+    'use server';
+    const supabase = getAdminClient();
+
+    const cityRaw = String(formData.get('city') || '').trim();
+    const dateRaw = String(formData.get('date') || '').trim(); // YYYY-MM-DD from <input type="date">
+
+    if (!cityRaw || !dateRaw) {
+      redirect('/admin?err=missing');
+    }
+
+    const cityTitle =
+      cityRaw
+        .toLowerCase()
+        .replace(/\s+/g, ' ')
+        .split(' ')
+        .map(w => w ? w[0].toUpperCase() + w.slice(1) : '')
+        .join(' ')
+        .trim() || 'City';
+
+    // Compact date for title and slug
+    const ymd = dateRaw.replaceAll('-', ''); // 20250926
+
+    const title = `${cityTitle} ${ymd}`;
+    const slug =
+      `${cityRaw.toLowerCase().replace(/\s+/g, '-')}-${ymd}`; // berlin-20250926
+
+    const { error } = await supabase
+      .from('events')
+      .insert([{ slug, city: cityTitle, title }]);
+
+    // Always return to admin page (simple flow)
+    redirect('/admin');
   }
 
+  // If not logged in, show password form
   if (!authed) {
     return (
-      <div style={{ padding: 24, maxWidth: 520 }}>
-        <h1>Admin Login</h1>
-        <form action={login} style={{ display: "flex", gap: 8 }}>
-          <input
-            name="password"
-            type="password"
-            placeholder="Enter password"
-            style={{ padding: 10, flex: 1 }}
-            required
-          />
-          <button type="submit" style={{ padding: "10px 12px" }}>
-            Login
+      <main className="px-6 pt-28 pb-20 max-w-xl">
+        <h1 className="text-3xl font-semibold mb-6">Admin</h1>
+        <form action={login} className="space-y-4">
+          <div>
+            <label htmlFor="password" className="block mb-1">Password</label>
+            <input
+              id="password"
+              name="password"
+              type="password"
+              className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+              placeholder="Enter password"
+              required
+            />
+          </div>
+          <button className="rounded border border-white/30 px-4 py-2 hover:bg-white/10">
+            Log in
           </button>
         </form>
-      </div>
+      </main>
     );
   }
 
-  // ---------- Supabase ----------
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const srv = process.env.SUPABASE_SERVICE_ROLE || "";
-  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-  const sb = createClient(url, srv || anon, { auth: { persistSession: false } });
-
-  // ---------- Actions ----------
-  async function setStatus(formData: FormData) {
-    "use server";
-    const id = String(formData.get("id") || "");
-    const status = String(formData.get("status") || "");
-    if (id && status) {
-      const sb2 = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-        process.env.SUPABASE_SERVICE_ROLE || "",
-        { auth: { persistSession: false } }
-      );
-      await sb2.from("submissions").update({ status }).eq("id", id);
-    }
-    redirect(
-      `/admin?status=${encodeURIComponent(activeStatus)}${
-        eventFilter ? `&event=${eventFilter}` : ""
-      }`
-    );
-  }
-
-  // Create event: City + Date required; slug auto-generated
-  async function createEvent(formData: FormData) {
-    "use server";
-    const city = String(formData.get("city") || "").trim();
-    const date = String(formData.get("date") || "").trim(); // YYYY-MM-DD
-    if (!city || !date) {
-      redirect("/admin");
-      return;
-    }
-    const slug =
-      city.toLowerCase().replace(/\s+/g, "-") + "-" + date.replace(/-/g, "");
-    const sb2 = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-      process.env.SUPABASE_SERVICE_ROLE || "",
-      { auth: { persistSession: false } }
-    );
-    await sb2.from("events").insert({
-      slug,
-      title: null,
-      city,
-      start_at: new Date(date).toISOString(),
-    });
-    redirect("/admin");
-  }
-
-  // Assign submission to an event (set event_id)
-  async function assignEvent(formData: FormData) {
-    "use server";
-    const id = String(formData.get("id") || "");
-    const event_id_str = String(formData.get("event_id") || "");
-    const event_id = event_id_str ? Number(event_id_str) : null;
-    if (id) {
-      const sb2 = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-        process.env.SUPABASE_SERVICE_ROLE || "",
-        { auth: { persistSession: false } }
-      );
-      await sb2.from("submissions").update({ event_id }).eq("id", id);
-    }
-    redirect(
-      `/admin?status=${encodeURIComponent(activeStatus)}${
-        eventFilter ? `&event=${eventFilter}` : ""
-      }`
-    );
-  }
-
-  // ---------- Data ----------
-  // Events for filter and assignment
-  const { data: evs } = await sb
-    .from("events")
-    .select("id, slug, city, title")
-    .order("start_at", { ascending: false });
-  const allEvents: EventRow[] = evs || [];
-
-  // Submissions
-  let q = sb.from("submissions").select("*").order("created_at", {
-    ascending: false,
-  });
-  if (["pending", "approved", "archived"].includes(activeStatus)) {
-    q = q.eq("status", activeStatus);
-  }
-  if (eventFilter) {
-    q = q.eq("event_id", eventFilter);
-  }
-  const { data, error } = await q;
-  const rows = (data as Submission[]) || [];
-
-  // Buckets
-  const { data: bucketList } = await sb.storage.listBuckets();
-  const bucketNames = new Set((bucketList || []).map((b) => b.name));
-
-  function ext(path: string) {
-    const i = path.lastIndexOf(".");
-    return i >= 0 ? path.slice(i + 1).toLowerCase() : "";
-  }
-  function guessType(path: string) {
-    const e = ext(path);
-    if (["mp4", "m4v", "mov", "webm", "mkv", "avi"].includes(e)) return "video";
-    if (["mp3", "wav", "aac", "m4a", "flac", "ogg"].includes(e)) return "audio";
-    if (["jpg", "jpeg", "png", "gif", "webp", "avif"].includes(e)) return "image";
-    return "file";
-  }
-
-  const items = await Promise.all(
-    rows.map(async (s) => {
-      const candidates = [s.storage_bucket || "", "videos", "submissions", "public"].filter(
-        Boolean
-      ) as string[];
-      let bucket = candidates.find((n) => bucketNames.has(n)) || "";
-      if (!bucket && bucketList && bucketList.length) bucket = bucketList[0].name;
-
-      let fileUrl: string | null = null;
-      let urlErr: string | null = null;
-      if (bucket && s.file_path) {
-        const { data: signed, error: e } = await sb.storage
-          .from(bucket)
-          .createSignedUrl(s.file_path, 60 * 60 * 12);
-        if (e) urlErr = e.message;
-        else fileUrl = signed?.signedUrl || null;
-      } else {
-        urlErr = "missing bucket or path";
-      }
-
-      return {
-        ...s,
-        uiType: s.file_path ? guessType(s.file_path) : "file",
-        bucketUsed: bucket,
-        fileUrl,
-        urlErr,
-      };
-    })
-  );
+  // Logged in: fetch recent events
+  const supabase = getAdminClient();
+  const { data: events } = await supabase
+    .from('events')
+    .select('id, slug, city, title')
+    .order('id', { ascending: false })
+    .returns<EventRow[]>();
 
   return (
-    <div style={{ padding: 24, maxWidth: 980 }}>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-        }}
-      >
-        <h1>Admin</h1>
-        <form action={logout}>
-          <button type="submit" style={{ fontSize: 14 }}>
-            Log out
-          </button>
-        </form>
-      </div>
+    <main className="px-6 pt-28 pb-20">
+      <h1 className="text-3xl font-semibold mb-8">Admin</h1>
 
       {/* Create Event */}
-      <section style={{ marginTop: 16, padding: 12, border: "1px solid #343434", borderRadius: 8 }}>
-        <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Create New Event</h2>
-        <form action={createEvent} method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          <input name="city" placeholder="City (e.g. Berlin)" required style={{ flex: "1 1 180px", padding: 6 }} />
-          <input type="date" name="date" required style={{ flex: "0 1 180px", padding: 6 }} />
-          <button type="submit" style={{ padding: "6px 12px" }}>Create event</button>
+      <section className="max-w-2xl mb-12">
+        <h2 className="text-xl font-semibold mb-4">Create event</h2>
+        <form action={createEvent} className="space-y-5">
+          <div>
+            <label htmlFor="city" className="block mb-1">City</label>
+            <input
+              id="city"
+              name="city"
+              className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+              placeholder="Berlin"
+              required
+            />
+          </div>
+
+          <div>
+            <label htmlFor="date" className="block mb-1">Date</label>
+            <input
+              id="date"
+              name="date"
+              type="date"
+              className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+              required
+            />
+          </div>
+
+          <button className="rounded border border-white/30 px-4 py-2 hover:bg-white/10">
+            Save event
+          </button>
         </form>
-        <p style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
-          A URL slug is auto-generated from city and date, for example <code>berlin-20250926</code>.
-        </p>
       </section>
 
-      {/* Status filter */}
-      <nav style={{ marginTop: 16, display: "flex", gap: 12, fontSize: 14 }}>
-        {["all", "pending", "approved", "archived"].map((s) => (
-          <a
-            key={s}
-            href={`/admin?status=${s}${eventFilter ? `&event=${eventFilter}` : ""}`}
-            style={{ textDecoration: activeStatus === s ? "underline" : "none" }}
-          >
-            {s[0].toUpperCase() + s.slice(1)}
-          </a>
-        ))}
-      </nav>
-
-      {/* Event filter */}
-      <form method="get" style={{ marginTop: 12, marginBottom: 8 }}>
-        <input type="hidden" name="status" value={activeStatus} />
-        <label style={{ fontSize: 14, marginRight: 8 }}>Event:</label>
-        <select name="event" defaultValue={eventFilter ?? ""}>
-          <option value="">All</option>
-          {allEvents.map((ev) => (
-            <option key={ev.id} value={ev.id}>
-              {ev.city ? ev.city + " · " : ""}
-              {ev.title || "Untitled"}
-            </option>
+      {/* Events list */}
+      <section className="max-w-3xl">
+        <h2 className="text-xl font-semibold mb-4">Events</h2>
+        <div className="divide-y divide-white/10 border border-white/10 rounded">
+          {(events || []).map((ev) => (
+            <div key={ev.id} className="px-4 py-3 flex items-center justify-between">
+              <div>
+                <div className="font-medium">{ev.title}</div>
+                <div className="text-sm opacity-70">{ev.slug}</div>
+              </div>
+              <div className="text-sm opacity-70">{ev.city}</div>
+            </div>
           ))}
-        </select>
-        <button type="submit" style={{ marginLeft: 8 }}>Apply</button>
-      </form>
-
-      {/* Quick link to screening page for the selected event */}
-      {(() => {
-        const selected = eventFilter ? allEvents.find((ev) => ev.id === eventFilter) : null;
-        return selected ? (
-          <div style={{ margin: "4px 0 16px" }}>
-            <a
-              href={`/events/${encodeURIComponent(selected.slug)}/screen`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open screening page for {selected.city || selected.title}
-            </a>
-          </div>
-        ) : null;
-      })()}
-
-      {error ? (
-        <p style={{ color: "crimson", marginTop: 12 }}>Error: {error.message}</p>
-      ) : items.length === 0 ? (
-        <p style={{ marginTop: 12 }}>No submissions.</p>
-      ) : (
-        <ul
-          style={{
-            display: "grid",
-            gap: 12,
-            listStyle: "none",
-            padding: 0,
-            marginTop: 16,
-          }}
-        >
-          {items.map((s) => {
-            const chosenEvent =
-              (eventFilter && allEvents.find((ev) => ev.id === eventFilter)) ||
-              (s.event_id && allEvents.find((ev) => ev.id === s.event_id)) ||
-              null;
-
-            const screenHref = chosenEvent
-              ? `/events/${encodeURIComponent(chosenEvent.slug)}/screen`
-              : null;
-
-            return (
-              <li
-                key={s.id}
-                style={{
-                  border: "1px solid #343434",
-                  borderRadius: 8,
-                  padding: 12,
-                }}
-              >
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    gap: 12,
-                  }}
-                >
-                  <div>
-                    <strong>{s.title || s.file_path || s.id}</strong>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>
-                      {new Date(s.created_at).toLocaleString()}
-                      {s.status ? ` · ${s.status}` : ""}
-                      {s.event_id ? ` · event #${s.event_id}` : ""}
-                    </div>
-                    {s.description ? (
-                      <p style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-                        {s.description}
-                      </p>
-                    ) : null}
-                    <div
-                      style={{
-                        fontSize: 11,
-                        opacity: 0.6,
-                        marginTop: 4,
-                      }}
-                    >
-                      bucket: {s.bucketUsed || "unknown"} · path: {s.file_path || "none"}
-                      {s.urlErr ? ` · url error: ${s.urlErr}` : ""}
-                    </div>
-
-                    {screenHref ? (
-                      <div style={{ marginTop: 6 }}>
-                        <a href={screenHref} target="_blank" rel="noreferrer">
-                          Screen event page
-                        </a>
-                      </div>
-                    ) : (
-                      <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>
-                        Select or assign an event to enable the screening link.
-                      </div>
-                    )}
-                  </div>
-
-                  <div style={{ display: "flex", gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
-                    {/* Status buttons */}
-                    <form action={setStatus}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <input type="hidden" name="status" value="approved" />
-                      <button type="submit" style={{ fontSize: 12 }}>Approve</button>
-                    </form>
-                    <form action={setStatus}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <input type="hidden" name="status" value="archived" />
-                      <button type="submit" style={{ fontSize: 12 }}>Archive</button>
-                    </form>
-                    <form action={setStatus}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <input type="hidden" name="status" value="pending" />
-                      <button type="submit" style={{ fontSize: 12 }}>Pending</button>
-                    </form>
-
-                    {/* Assign to event */}
-                    <form action={assignEvent} style={{ display: "flex", gap: 6 }}>
-                      <input type="hidden" name="id" value={s.id} />
-                      <select name="event_id" defaultValue={s.event_id ?? ""} style={{ fontSize: 12 }}>
-                        <option value="">No event</option>
-                        {allEvents.map((ev) => (
-                          <option key={ev.id} value={ev.id}>
-                            {ev.city ? ev.city + " · " : ""}
-                            {ev.title || "Untitled"}
-                          </option>
-                        ))}
-                      </select>
-                      <button type="submit" style={{ fontSize: 12 }}>Assign</button>
-                    </form>
-                  </div>
-                </div>
-
-                {/* Preview */}
-                <div style={{ marginTop: 12 }}>
-                  {s.fileUrl ? (
-                    <>
-                      {s.uiType === "video" && (
-                        <video
-                          controls
-                          preload="metadata"
-                          style={{ maxWidth: "100%", borderRadius: 6 }}
-                          src={s.fileUrl}
-                        />
-                      )}
-                      {s.uiType === "audio" && (
-                        <audio controls style={{ width: "100%" }} src={s.fileUrl} />
-                      )}
-                      {s.uiType === "image" && (
-                        <img
-                          alt={s.title || s.file_path || ""}
-                          style={{ maxWidth: "100%", borderRadius: 6 }}
-                          src={s.fileUrl}
-                        />
-                      )}
-                      {s.uiType === "file" && (
-                        <p style={{ fontSize: 12, opacity: 0.8 }}>
-                          Preview not supported in-browser; use Open file.
-                        </p>
-                      )}
-                      <div style={{ marginTop: 6 }}>
-                        <a href={s.fileUrl} target="_blank" rel="noreferrer">
-                          Open file
-                        </a>
-                      </div>
-                    </>
-                  ) : (
-                    <p style={{ fontSize: 12, color: "crimson" }}>
-                      File URL unavailable.
-                    </p>
-                  )}
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
+          {(!events || events.length === 0) && (
+            <div className="px-4 py-3 text-sm opacity-70">No events yet.</div>
+          )}
+        </div>
+      </section>
+    </main>
   );
 }
