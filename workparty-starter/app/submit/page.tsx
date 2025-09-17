@@ -2,13 +2,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const MAX_SIZE_MB = 3000; // ~3 GB limit
+const MAX_SIZE_BYTES = 3 * 1024 * 1024 * 1024; // 3 GB in bytes
+const MAX_SIZE_LABEL = "3 GB";
 const ALLOWED_MIME = ['video/mp4']; // MP4 only
 
 type Stage = 'idle' | 'signing' | 'uploading' | 'confirming' | 'done' | 'error';
 
 type EventRow = {
-  id: number;           // matches events.id (bigint)
+  id: number;
   slug: string;
   title: string | null;
   city: string | null;
@@ -57,9 +58,7 @@ export default function SubmitPage() {
         if (live) setEventsLoading(false);
       }
     })();
-    return () => {
-      live = false;
-    };
+    return () => { live = false; };
   }, [supabase]);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -72,9 +71,8 @@ export default function SubmitPage() {
       setMessage('Only MP4 files are accepted.');
       return;
     }
-    const sizeMB = Math.round(f.size / (1024 * 1024));
-    if (sizeMB > MAX_SIZE_MB) {
-      setMessage(`File too large. Max ${MAX_SIZE_MB} MB.`);
+    if (f.size > MAX_SIZE_BYTES) {
+      setMessage(`File too large. Max ${MAX_SIZE_LABEL}.`);
       return;
     }
     setFile(f);
@@ -173,15 +171,11 @@ export default function SubmitPage() {
           </label>
           <select
             value={eventId ?? ''}
-            onChange={(e) =>
-              setEventId(e.target.value ? Number(e.target.value) : null)
-            }
+            onChange={(e) => setEventId(e.target.value ? Number(e.target.value) : null)}
             style={{ display: 'block', marginTop: 8 }}
             required
           >
-            <option value="" disabled>
-              Select an event
-            </option>
+            <option value="" disabled>Select an event</option>
             {events.map((ev) => (
               <option key={ev.id} value={ev.id}>
                 {(ev.title || ev.slug) + (ev.city ? ` — ${ev.city}` : '')}
@@ -208,15 +202,13 @@ export default function SubmitPage() {
         <input
           type="number"
           value={year}
-          onChange={(e) =>
-            setYear(e.target.value === '' ? '' : Number(e.target.value))
-          }
+          onChange={(e) => setYear(e.target.value === '' ? '' : Number(e.target.value))}
         />
 
         <label>Runtime *</label>
         <input value={runtime} onChange={(e) => setRuntime(e.target.value)} />
 
-        <label>Video file (MP4, max {MAX_SIZE_MB} MB) *</label>
+        <label>Video file (MP4, max {MAX_SIZE_LABEL}) *</label>
         <input
           id="file-input"
           type="file"
@@ -227,25 +219,16 @@ export default function SubmitPage() {
         <button
           className="btn"
           type="submit"
-          disabled={
-            stage === 'signing' ||
-            stage === 'uploading' ||
-            stage === 'confirming'
-          }
+          disabled={stage === 'signing' || stage === 'uploading' || stage === 'confirming'}
         >
-          {stage === 'signing'
-            ? 'Preparing…'
-            : stage === 'uploading'
-            ? 'Uploading…'
-            : stage === 'confirming'
-            ? 'Saving…'
-            : 'Submit'}
+          {stage === 'signing' ? 'Preparing…'
+           : stage === 'uploading' ? 'Uploading…'
+           : stage === 'confirming' ? 'Saving…'
+           : 'Submit'}
         </button>
       </form>
 
-      {message ? (
-        <p className="muted" style={{ marginTop: 12 }}>{message}</p>
-      ) : null}
+      {message ? <p className="muted" style={{ marginTop: 12 }}>{message}</p> : null}
     </section>
   );
 }
