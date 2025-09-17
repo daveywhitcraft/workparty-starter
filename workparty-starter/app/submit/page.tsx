@@ -224,7 +224,9 @@ export default function SubmitPage() {
           </div>
         )}
 
-        {msg && <p className="mt-3 text-sm opacity-80">{msg}</p>}
+{(phase === 'done' || phase === 'error') && msg && (
+  <p className="mt-3 text-sm opacity-80">{msg}</p>
+)}
       </form>
     </main>
   );
