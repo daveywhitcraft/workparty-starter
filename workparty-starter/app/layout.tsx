@@ -13,20 +13,30 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen">
-        {/* Background image */}
+      <body className="min-h-screen text-white">
+        {/* Background */}
         <div
-          className="fixed inset-0 z-0 bg-center bg-cover"
+          className="fixed inset-0 z-0 bg-cover bg-center"
           style={{ backgroundImage: "url('/bg.jpg')" }}
         />
 
-        {/* Dark overlay for readability */}
-        <div className="fixed inset-0 z-10 bg-black/40" />
+        {/* Menu */}
+        <header className="relative z-30">
+          <nav className="flex items-center justify-between px-6 py-6">
+            <a href="/" className="underline text-lg">WORK.PARTY</a>
+            <div className="flex gap-6">
+              <a href="/submit" className="underline">Submit</a>
+              <a href="/archive" className="underline">Archive</a>
+              <a href="/about" className="underline">About</a>
+              <a href="/admin" className="underline">Admin</a>
+            </div>
+          </nav>
+        </header>
 
-        {/* Page content goes above background */}
-        <div className="relative z-20">
+        {/* Page content (blank for now) */}
+        <main className="relative z-20">
           {children}
-        </div>
+        </main>
       </body>
     </html>
   );
