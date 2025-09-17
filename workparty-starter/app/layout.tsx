@@ -1,21 +1,32 @@
-import './globals.css';
-import Link from 'next/link';
-export const metadata = { title: 'WORK.PARTY', description: 'Submissions, screening, archive' };
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// app/layout.tsx
+import type { Metadata } from "next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "WORK.PARTY",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
-      <body>
-        <header className="container" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div><Link href="/">WORK.PARTY</Link></div>
-          <nav className="row" style={{gap:16}}>
-            <Link href="/submit">Submit</Link>
-          
-            <Link href="/archive">Archive</Link>
-            <Link href="/about">About</Link>
-            <Link href="/admin">Admin</Link>
-          </nav>
-        </header>
-        <main className="container">{children}</main>
+      <body className="min-h-screen">
+        {/* Background image */}
+        <div
+          className="fixed inset-0 z-0 bg-center bg-cover"
+          style={{ backgroundImage: "url('/bg.jpg')" }}
+        />
+
+        {/* Dark overlay for readability */}
+        <div className="fixed inset-0 z-10 bg-black/40" />
+
+        {/* Page content goes above background */}
+        <div className="relative z-20">
+          {children}
+        </div>
       </body>
     </html>
   );
