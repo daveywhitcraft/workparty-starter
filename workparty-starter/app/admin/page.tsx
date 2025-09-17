@@ -97,11 +97,10 @@ export default async function AdminPage({ searchParams }: Props) {
     );
   }
 
-  // Create event: City + Date required; Name optional; slug auto-generated
+  // Create event: City + Date required; slug auto-generated
   async function createEvent(formData: FormData) {
     "use server";
     const city = String(formData.get("city") || "").trim();
-    const title = String(formData.get("title") || "").trim();
     const date = String(formData.get("date") || "").trim(); // YYYY-MM-DD
     if (!city || !date) {
       redirect("/admin");
@@ -116,7 +115,7 @@ export default async function AdminPage({ searchParams }: Props) {
     );
     await sb2.from("events").insert({
       slug,
-      title: title || null,
+      title: null,
       city,
       start_at: new Date(date).toISOString(),
     });
@@ -233,12 +232,11 @@ export default async function AdminPage({ searchParams }: Props) {
         <h2 style={{ margin: "0 0 8px 0", fontSize: 16 }}>Create New Event</h2>
         <form action={createEvent} method="post" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input name="city" placeholder="City (e.g. Berlin)" required style={{ flex: "1 1 180px", padding: 6 }} />
-          <input name="title" placeholder="Event name / theme (optional)" style={{ flex: "2 1 260px", padding: 6 }} />
           <input type="date" name="date" required style={{ flex: "0 1 180px", padding: 6 }} />
           <button type="submit" style={{ padding: "6px 12px" }}>Create event</button>
         </form>
         <p style={{ fontSize: 12, opacity: 0.6, marginTop: 4 }}>
-          A URL slug is auto‑generated from city + date (e.g. <code>berlin-20250926</code>).
+          A URL slug is auto-generated from city and date, for example <code>berlin-20250926</code>.
         </p>
       </section>
 
@@ -281,7 +279,7 @@ export default async function AdminPage({ searchParams }: Props) {
               target="_blank"
               rel="noreferrer"
             >
-              Open screening page for {selected.city || selected.title} ↗
+              Open screening page for {selected.city || selected.title}
             </a>
           </div>
         ) : null;
@@ -307,7 +305,6 @@ export default async function AdminPage({ searchParams }: Props) {
               (s.event_id && allEvents.find((ev) => ev.id === s.event_id)) ||
               null;
 
-            // Event-level screen link (plays ALL approved videos for the event)
             const screenHref = chosenEvent
               ? `/events/${encodeURIComponent(chosenEvent.slug)}/screen`
               : null;
@@ -354,7 +351,7 @@ export default async function AdminPage({ searchParams }: Props) {
                     {screenHref ? (
                       <div style={{ marginTop: 6 }}>
                         <a href={screenHref} target="_blank" rel="noreferrer">
-                          Screen event page ↗
+                          Screen event page
                         </a>
                       </div>
                     ) : (
