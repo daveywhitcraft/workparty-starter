@@ -12,6 +12,7 @@ const supabase = createClient(
 export default function SubmitPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
+  const [phase, setPhase] = useState<'idle' | 'upload' | 'save' | 'done' | 'error'>('idle');
 
   function parseMmSs(mmss: string) {
     const m = mmss.match(/^(\d{1,3}):([0-5]\d)$/);
@@ -19,7 +20,7 @@ export default function SubmitPage() {
     const minutes = parseInt(m[1], 10);
     const seconds = parseInt(m[2], 10);
     const totalSeconds = minutes * 60 + seconds;
-    const runtimeMinutesRounded = minutes + (seconds >= 30 ? 1 : 0); // for legacy "minutes" field
+    const runtimeMinutesRounded = minutes + (seconds >= 30 ? 1 : 0);
     return {
       mmss,
       totalSeconds,
@@ -32,7 +33,8 @@ export default function SubmitPage() {
     e.preventDefault();
     if (busy) return;
     setBusy(true);
-    setMsg(null);
+    setPhase('upload');
+    setMsg('Uploading…');
 
     try {
       const formEl = e.currentTarget;
@@ -47,16 +49,15 @@ export default function SubmitPage() {
 
       const parsed = parseMmSs(runtimeStr);
       if (!title || !artist_name || !city || !year || !runtimeStr || !file || !parsed) {
+        setPhase('error');
         setMsg('Please fill every field. Runtime must look like 13:40.');
         setBusy(false);
         return;
       }
 
-      // Storage path
       const safeName = file.name.replace(/\s+/g, '_');
       const path = `submissions/${Date.now()}_${safeName}`;
 
-      // Upload to Supabase Storage
       const { error: upErr } = await supabase
         .storage
         .from('videos')
@@ -66,12 +67,15 @@ export default function SubmitPage() {
         });
 
       if (upErr) {
+        setPhase('error');
         setMsg(`Upload error: ${upErr.message}`);
         setBusy(false);
         return;
       }
 
-      // Save DB row through your existing API
+      setPhase('save');
+      setMsg('Saving…');
+
       const resp = await fetch('/api/confirm-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -80,9 +84,7 @@ export default function SubmitPage() {
           artist_name,
           city,
           year,
-          // keep the original "runtime" numeric minutes field for compatibility
           runtime: parsed.minutesRounded,
-          // send richer values too, in case the API wants them
           runtime_seconds: parsed.totalSeconds,
           runtime_mmss: parsed.mmss,
           runtime_minutes_exact: parsed.minutesExact,
@@ -94,14 +96,17 @@ export default function SubmitPage() {
 
       if (!resp.ok) {
         const txt = await resp.text();
+        setPhase('error');
         setMsg(`confirm-upload: ${resp.status} ${txt}`);
         setBusy(false);
         return;
       }
 
+      setPhase('done');
       setMsg('Submitted. Thank you!');
       formEl.reset();
     } catch (err: any) {
+      setPhase('error');
       setMsg(err?.message || 'Upload failed');
     } finally {
       setBusy(false);
@@ -127,6 +132,7 @@ export default function SubmitPage() {
             required
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
             placeholder="Title"
+            disabled={busy}
           />
         </div>
 
@@ -138,6 +144,7 @@ export default function SubmitPage() {
             required
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
             placeholder="Your name"
+            disabled={busy}
           />
         </div>
 
@@ -149,6 +156,7 @@ export default function SubmitPage() {
             required
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
             placeholder="City"
+            disabled={busy}
           />
         </div>
 
@@ -161,6 +169,7 @@ export default function SubmitPage() {
             required
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
             placeholder="2025"
+            disabled={busy}
           />
         </div>
 
@@ -175,6 +184,7 @@ export default function SubmitPage() {
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
             placeholder="13:40"
             title="Use mm:ss, for example 07:30 or 13:40"
+            disabled={busy}
           />
         </div>
 
@@ -187,16 +197,32 @@ export default function SubmitPage() {
             accept="video/mp4"
             required
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+            disabled={busy}
           />
         </div>
 
         <button
           type="submit"
-          className="rounded border border-white/30 px-4 py-2 hover:bg-white/10"
+          className="rounded border border-white/30 px-4 py-2 hover:bg-white/10 disabled:opacity-60"
           disabled={busy}
         >
-          Submit
+          {busy ? (phase === 'upload' ? 'Uploading…' : 'Saving…') : 'Submit'}
         </button>
+
+        {busy && (
+          <div className="mt-3">
+            <div className="h-1 w-full bg-white/10 overflow-hidden rounded">
+              <div className="h-full w-1/3 bg-white/60 animate-[wpbar_1.2s_ease_infinite]" />
+            </div>
+            <style jsx>{`
+              @keyframes wpbar {
+                0% { transform: translateX(-100%); }
+                50% { transform: translateX(50%); }
+                100% { transform: translateX(200%); }
+              }
+            `}</style>
+          </div>
+        )}
 
         {msg && <p className="mt-3 text-sm opacity-80">{msg}</p>}
       </form>
