@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
-const MAX_SIZE_MB = 250; // 250 MB
+const MAX_SIZE_MB = 3000; // ~3 GB limit
 const ALLOWED_MIME = ['video/mp4']; // MP4 only
 
 type Stage = 'idle' | 'signing' | 'uploading' | 'confirming' | 'done' | 'error';
@@ -27,14 +27,10 @@ export default function SubmitPage() {
   const [stage, setStage] = useState<Stage>('idle');
   const [message, setMessage] = useState('');
 
-
-  
-  // ---- NEW: event selection state ----
   const [events, setEvents] = useState<EventRow[]>([]);
   const [eventsLoading, setEventsLoading] = useState(true);
   const [eventId, setEventId] = useState<number | null>(null);
 
-  // client supabase (public anon) to fetch open events
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
     const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -56,13 +52,14 @@ export default function SubmitPage() {
         const rows = (data as EventRow[]) || [];
         if (!live) return;
         setEvents(rows);
-        // auto-select if exactly one open event
         if (rows.length === 1) setEventId(rows[0].id);
       } finally {
         if (live) setEventsLoading(false);
       }
     })();
-    return () => { live = false; };
+    return () => {
+      live = false;
+    };
   }, [supabase]);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -87,7 +84,6 @@ export default function SubmitPage() {
     e.preventDefault();
     setMessage('');
 
-    // If multiple events are open, require a choice.
     if (events.length > 1 && !eventId) {
       setMessage('Please choose which event you are submitting to.');
       return;
@@ -99,7 +95,6 @@ export default function SubmitPage() {
     }
 
     try {
-      // 1) Ask backend for signed upload URL
       setStage('signing');
       const signResp = await fetch('/api/signed-upload', {
         method: 'POST',
@@ -118,7 +113,6 @@ export default function SubmitPage() {
         return;
       }
 
-      // 2) Upload file with PUT directly
       setStage('uploading');
       const putResp = await fetch(signJson.uploadUrl, {
         method: 'PUT',
@@ -132,7 +126,6 @@ export default function SubmitPage() {
         return;
       }
 
-      // 3) Save metadata (UNCHANGED, just adds event_id when known)
       setStage('confirming');
       const confirmResp = await fetch('/api/confirm-upload', {
         method: 'POST',
@@ -144,7 +137,6 @@ export default function SubmitPage() {
           year: Number(year),
           runtime,
           file_path: signJson.path,
-          // NEW: include event_id if we have one (server trigger still covers the fallback)
           event_id: eventId ?? undefined,
         }),
       });
@@ -164,7 +156,6 @@ export default function SubmitPage() {
       setRuntime('');
       (document.getElementById('file-input') as HTMLInputElement).value = '';
       setFile(null);
-      // keep the event selection as-is so users can submit multiple times to same event
     } catch {
       setStage('error');
       setMessage('Submission problem.');
@@ -175,7 +166,6 @@ export default function SubmitPage() {
     <section className="p-6 max-w-xl">
       <h1 className="title mb-4">Submit your video</h1>
 
-      {/* NEW: Only shows if 2+ events are open. If 1 event is open, we auto-select it and hide UI. */}
       {eventsLoading ? null : events.length > 1 ? (
         <div className="card" style={{ padding: 16, marginBottom: 16 }}>
           <label>
@@ -183,11 +173,15 @@ export default function SubmitPage() {
           </label>
           <select
             value={eventId ?? ''}
-            onChange={(e) => setEventId(e.target.value ? Number(e.target.value) : null)}
+            onChange={(e) =>
+              setEventId(e.target.value ? Number(e.target.value) : null)
+            }
             style={{ display: 'block', marginTop: 8 }}
             required
           >
-            <option value="" disabled>Select an event</option>
+            <option value="" disabled>
+              Select an event
+            </option>
             {events.map((ev) => (
               <option key={ev.id} value={ev.id}>
                 {(ev.title || ev.slug) + (ev.city ? ` — ${ev.city}` : '')}
@@ -200,7 +194,6 @@ export default function SubmitPage() {
         </div>
       ) : null}
 
-      
       <form onSubmit={onSubmit} className="flex-col" style={{ gap: 12 }}>
         <label>Title *</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} />
@@ -215,7 +208,9 @@ export default function SubmitPage() {
         <input
           type="number"
           value={year}
-          onChange={(e) => setYear(e.target.value === '' ? '' : Number(e.target.value))}
+          onChange={(e) =>
+            setYear(e.target.value === '' ? '' : Number(e.target.value))
+          }
         />
 
         <label>Runtime *</label>
@@ -232,15 +227,25 @@ export default function SubmitPage() {
         <button
           className="btn"
           type="submit"
-          disabled={stage === 'signing' || stage === 'uploading' || stage === 'confirming'}
+          disabled={
+            stage === 'signing' ||
+            stage === 'uploading' ||
+            stage === 'confirming'
+          }
         >
-          {stage === 'signing' ? 'Preparing…' :
-           stage === 'uploading' ? 'Uploading…' :
-           stage === 'confirming' ? 'Saving…' : 'Submit'}
+          {stage === 'signing'
+            ? 'Preparing…'
+            : stage === 'uploading'
+            ? 'Uploading…'
+            : stage === 'confirming'
+            ? 'Saving…'
+            : 'Submit'}
         </button>
       </form>
 
-      {message ? <p className="muted" style={{ marginTop: 12 }}>{message}</p> : null}
+      {message ? (
+        <p className="muted" style={{ marginTop: 12 }}>{message}</p>
+      ) : null}
     </section>
   );
 }
