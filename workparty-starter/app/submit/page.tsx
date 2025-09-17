@@ -198,14 +198,7 @@ export default function SubmitPage() {
         </div>
       ) : null}
 
-      <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-        <b>Rules</b>
-        <ul style={{ marginTop: 8, lineHeight: 1.5 }}>
-          <li>Allowed type: <b>MP4</b></li>
-          <li>Maximum size: <b>{MAX_SIZE_MB} MB</b></li>
-        </ul>
-      </div>
-
+      
       <form onSubmit={onSubmit} className="flex-col" style={{ gap: 12 }}>
         <label>Title *</label>
         <input value={title} onChange={(e) => setTitle(e.target.value)} />
