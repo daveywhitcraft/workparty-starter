@@ -8,17 +8,15 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
 
+    // Accept what your form sends (mm:ss etc.), but only store known columns.
     const {
       title,
       artist_name,
       city,
       year,
-      // Optional runtime fields our submit page may send
-      runtime,                 // rounded minutes (number)
-      runtime_seconds,         // optional
-      runtime_mmss,            // optional "mm:ss"
-      runtime_minutes_exact,   // optional
-
+      runtime,          // number (minutes) — ok if missing
+      runtime_seconds,  // optional
+      runtime_mmss,     // optional "mm:ss"
       storage_bucket = 'videos',
       file_path,
       status = 'pending',
@@ -26,32 +24,32 @@ export async function POST(req: NextRequest) {
       order_index = null,
     } = body || {};
 
-    // Validate required fields only
+    // Required fields:
     if (!title || !artist_name || !city || !year || !file_path) {
       return NextResponse.json({ error: 'missing fields' }, { status: 400 });
     }
 
-    const db = supabaseService(); // uses the same URL + SERVICE ROLE as Admin
+    const db = supabaseService();
+
+    // Build the row with ONLY columns that exist in your table
+    const row: Record<string, any> = {
+      title,
+      artist_name,
+      city,
+      year: Number(year),
+      storage_bucket,
+      file_path,
+      status,
+      event_id,
+      order_index,
+    };
+    if (runtime !== undefined) row.runtime = runtime;
+    if (runtime_seconds !== undefined) row.runtime_seconds = runtime_seconds;
+    if (runtime_mmss !== undefined) row.runtime_mmss = runtime_mmss;
 
     const { data, error } = await db
       .from('submissions')
-      .insert([
-        {
-          title,
-          artist_name,
-          city,
-          year: Number(year),
-          runtime,
-          runtime_seconds,
-          runtime_mmss,
-          runtime_minutes_exact,
-          storage_bucket,
-          file_path,
-          status,
-          event_id,
-          order_index,
-        },
-      ])
+      .insert([row])
       .select('id')
       .single();
 
