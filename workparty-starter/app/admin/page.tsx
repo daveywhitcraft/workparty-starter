@@ -77,20 +77,28 @@ export default async function AdminPage() {
   // ---- data fetch (service key on the server) ----
   const db = supabaseService();
 
-  const { data: events = [] } = await db
-    .from('events')
-    .select('id, title, slug')
-    .order('id', { ascending: false })
-    .returns<EventRow[]>();
+  // events: coalesce null -> []
+  {
+    const { data: eventsRaw } = await db
+      .from('events')
+      .select('id, title, slug')
+      .order('id', { ascending: false })
+      .returns<EventRow[]>();
+    var events: EventRow[] = eventsRaw ?? [];
+  }
 
-  const { data: submissions = [] } = await db
-    .from('submissions')
-    .select(
-      'id, created_at, title, artist_name, city, year, runtime, runtime_mmss, status, storage_bucket, file_path, event_id, order_index'
-    )
-    .order('id', { ascending: false })
-    .limit(200)
-    .returns<Submission[]>();
+  // submissions: coalesce null -> []
+  {
+    const { data: submissionsRaw } = await db
+      .from('submissions')
+      .select(
+        'id, created_at, title, artist_name, city, year, runtime, runtime_mmss, status, storage_bucket, file_path, event_id, order_index'
+      )
+      .order('id', { ascending: false })
+      .limit(200)
+      .returns<Submission[]>();
+    var submissions: Submission[] = submissionsRaw ?? [];
+  }
 
   // ---- server actions for per-row controls ----
   async function setStatus(formData: FormData) {
@@ -117,7 +125,6 @@ export default async function AdminPage() {
     const id = String(formData.get('id') || '');
     const raw = formData.get('order_index');
     if (!id) redirect('/admin');
-    // Allow clearing the order to NULL
     const order_index =
       raw === null || raw === '' ? null : Number(String(raw).trim());
     await supabaseService().from('submissions').update({ order_index }).eq('id', id);
