@@ -1,42 +1,40 @@
+// app/api/confirm-upload/route.ts
+export const runtime = 'nodejs';
+
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-
-// Use whichever key name you already have in Vercel
-const SERVICE_KEY =
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE ||
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || // last fallback
-  '';
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  SERVICE_KEY
-);
-
-// 🔴 If your table has a different name, change this:
-const TABLE = 'submissions';
+import { supabaseService } from '@/lib/supabaseServer';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
 
     const {
       title,
       artist_name,
       city,
       year,
-      runtime,
+      // Optional runtime fields our submit page may send
+      runtime,                 // rounded minutes (number)
+      runtime_seconds,         // optional
+      runtime_mmss,            // optional "mm:ss"
+      runtime_minutes_exact,   // optional
+
+      storage_bucket = 'videos',
       file_path,
+      status = 'pending',
+      event_id = null,
+      order_index = null,
     } = body || {};
 
-    // Basic checks
-    if (!title || !artist_name || !city || !year || !runtime || !file_path) {
-      return NextResponse.json({ error: 'Missing fields' }, { status: 400 });
+    // Validate required fields only
+    if (!title || !artist_name || !city || !year || !file_path) {
+      return NextResponse.json({ error: 'missing fields' }, { status: 400 });
     }
 
-    // Insert a new row
-    const { error } = await supabase
-      .from(TABLE)
+    const db = supabaseService(); // uses the same URL + SERVICE ROLE as Admin
+
+    const { data, error } = await db
+      .from('submissions')
       .insert([
         {
           title,
@@ -44,18 +42,30 @@ export async function POST(req: NextRequest) {
           city,
           year: Number(year),
           runtime,
+          runtime_seconds,
+          runtime_mmss,
+          runtime_minutes_exact,
+          storage_bucket,
           file_path,
-          status: 'pending',
-          created_at: new Date().toISOString(),
+          status,
+          event_id,
+          order_index,
         },
-      ]);
+      ])
+      .select('id')
+      .single();
 
     if (error) {
+      console.error('confirm-upload insert error:', error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, id: data.id });
   } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 });
+    console.error('confirm-upload server error:', err);
+    return NextResponse.json(
+      { error: err?.message || 'server error' },
+      { status: 500 }
+    );
   }
 }
