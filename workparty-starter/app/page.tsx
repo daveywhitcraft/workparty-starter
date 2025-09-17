@@ -4,10 +4,7 @@ export default function Home() {
       className="min-h-screen bg-cover bg-center"
       style={{ backgroundImage: "url('/bg.jpg')" }}
     >
-      {/* optional overlay + content */}
-      <div className="min-h-screen bg-black/50 flex items-center justify-center text-white text-center px-4">
-        
-      </div>
+      <h1 className="text-white text-4xl text-center pt-20">Hello World</h1>
     </section>
   );
 }
