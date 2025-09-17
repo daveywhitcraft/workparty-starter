@@ -18,20 +18,20 @@ type Submission = {
   artist_name: string | null;
   city: string | null;
   year: number | null;
-  runtime: number | null;          // rounded minutes (legacy)
-  runtime_mmss?: string | null;    // optional
-  status: string | null;           // pending | approved | archived
-  storage_bucket: string | null;   // usually "videos"
+  runtime: number | null;
+  runtime_mmss?: string | null;
+  status: string | null;           // 'pending' | 'approved' | 'archived'
+  storage_bucket: string | null;   // usually 'videos'
   file_path: string | null;
   event_id: number | null;
   order_index?: number | null;
 };
 
 export default async function AdminPage() {
-  // ---- auth gate (same cookie your login sets) ----
+  // ---- auth gate (same cookie your login uses) ----
   const authed = cookies().get('wp_admin_auth')?.value === '1';
 
-  // server action: login (kept simple; uses env var like before)
+  // ----- server actions: login / logout -----
   async function login(formData: FormData) {
     'use server';
     const pass = String(formData.get('password') || '');
@@ -44,12 +44,19 @@ export default async function AdminPage() {
         path: '/',
         httpOnly: true,
         sameSite: 'lax',
-        maxAge: 60 * 60 * 8,
+        maxAge: 60 * 60 * 8, // 8h
       });
     }
     redirect('/admin');
   }
 
+  async function logout() {
+    'use server';
+    cookies().delete('wp_admin_auth');
+    redirect('/admin');
+  }
+
+  // show login page if not authed
   if (!authed) {
     return (
       <main className="px-6 pt-28 pb-20 max-w-xl">
@@ -74,33 +81,27 @@ export default async function AdminPage() {
     );
   }
 
-  // ---- data fetch (service key on the server) ----
+  // ---- data fetch (service role client) ----
   const db = supabaseService();
 
-  // events: coalesce null -> []
-  {
-    const { data: eventsRaw } = await db
-      .from('events')
-      .select('id, title, slug')
-      .order('id', { ascending: false })
-      .returns<EventRow[]>();
-    var events: EventRow[] = eventsRaw ?? [];
-  }
+  const { data: eventsRaw } = await db
+    .from('events')
+    .select('id, title, slug')
+    .order('id', { ascending: false })
+    .returns<EventRow[]>();
+  const events: EventRow[] = eventsRaw ?? [];
 
-  // submissions: coalesce null -> []
-  {
-    const { data: submissionsRaw } = await db
-      .from('submissions')
-      .select(
-        'id, created_at, title, artist_name, city, year, runtime, runtime_mmss, status, storage_bucket, file_path, event_id, order_index'
-      )
-      .order('id', { ascending: false })
-      .limit(200)
-      .returns<Submission[]>();
-    var submissions: Submission[] = submissionsRaw ?? [];
-  }
+  const { data: submissionsRaw } = await db
+    .from('submissions')
+    .select(
+      'id, created_at, title, artist_name, city, year, runtime, runtime_mmss, status, storage_bucket, file_path, event_id, order_index'
+    )
+    .order('id', { ascending: false })
+    .limit(200)
+    .returns<Submission[]>();
+  const submissions: Submission[] = submissionsRaw ?? [];
 
-  // ---- server actions for per-row controls ----
+  // ---- per-row actions ----
   async function setStatus(formData: FormData) {
     'use server';
     const id = String(formData.get('id') || '');
@@ -132,15 +133,21 @@ export default async function AdminPage() {
   }
 
   const fileUrl = (row: Submission) =>
-    row.file_path
-      ? `/api/public-url?path=${encodeURIComponent(row.file_path)}`
-      : '';
+    row.file_path ? `/api/public-url?path=${encodeURIComponent(row.file_path)}` : '';
 
   return (
     <main className="px-6 pt-28 pb-20 space-y-12">
-      <h1 className="text-3xl font-semibold">Admin</h1>
+      {/* header + logout */}
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-semibold">Admin</h1>
+        <form action={logout}>
+          <button className="rounded border border-white/30 px-3 py-1.5 hover:bg-white/10">
+            Log out
+          </button>
+        </form>
+      </div>
 
-      {/* Submissions management */}
+      {/* Submissions */}
       <section className="max-w-6xl">
         <h2 className="text-xl font-semibold mb-4">Submissions</h2>
 
