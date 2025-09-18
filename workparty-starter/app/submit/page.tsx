@@ -55,7 +55,7 @@ export default function SubmitPage() {
         return;
       }
 
-      // Minimal client checks: type and size
+      // Minimal client checks: extension and size
       const ext = file.name.split('.').pop()?.toLowerCase();
       const isAllowedExt = ext === 'mp4' || ext === 'mov';
       const maxBytes = 3 * 1024 * 1024 * 1024; // 3 GB
@@ -93,6 +93,7 @@ export default function SubmitPage() {
       setPhase('save');
       setMsg('Saving…');
 
+      // ✅ Only send the fields your table has
       const resp = await fetch('/api/confirm-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -102,9 +103,6 @@ export default function SubmitPage() {
           city,
           year,
           runtime: parsed.minutesRounded,
-          runtime_seconds: parsed.totalSeconds,
-          runtime_mmss: parsed.mmss,
-          runtime_minutes_exact: parsed.minutesExact,
           storage_bucket: 'videos',
           file_path: path,
           status: 'pending',
@@ -226,7 +224,7 @@ export default function SubmitPage() {
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
             disabled={busy}
           />
-        
+         
         </div>
 
         <button
