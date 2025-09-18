@@ -55,7 +55,7 @@ export default function SubmitPage() {
         return;
       }
 
-      // Minimal client checks: extension and size
+      // minimal client checks
       const ext = file.name.split('.').pop()?.toLowerCase();
       const isAllowedExt = ext === 'mp4' || ext === 'mov';
       const maxBytes = 3 * 1024 * 1024 * 1024; // 3 GB
@@ -93,7 +93,7 @@ export default function SubmitPage() {
       setPhase('save');
       setMsg('Saving…');
 
-      // ✅ Only send the fields your table has
+      // payload without storage_bucket and status
       const resp = await fetch('/api/confirm-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -103,9 +103,7 @@ export default function SubmitPage() {
           city,
           year,
           runtime: parsed.minutesRounded,
-          storage_bucket: 'videos',
           file_path: path,
-          status: 'pending',
         }),
       });
 
@@ -132,7 +130,6 @@ export default function SubmitPage() {
     <main className="px-6 pt-28 pb-20">
       <h1 className="text-3xl font-semibold mb-8">Submit your video</h1>
 
-      {/* Simple requirements box */}
       <div className="max-w-2xl mb-6 rounded border border-white/15 bg-white/5 p-4 text-sm">
         <p className="font-medium mb-1">Upload requirements</p>
         <ul className="list-disc ml-5 space-y-1">
@@ -151,93 +148,40 @@ export default function SubmitPage() {
       >
         <div>
           <label htmlFor="title" className="block mb-1">Title *</label>
-          <input
-            id="title"
-            name="title"
-            required
-            className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
-            placeholder="Title"
-            disabled={busy}
-          />
+          <input id="title" name="title" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="Title" disabled={busy} />
         </div>
 
         <div>
           <label htmlFor="artist_name" className="block mb-1">Artist name *</label>
-          <input
-            id="artist_name"
-            name="artist_name"
-            required
-            className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
-            placeholder="Your name"
-            disabled={busy}
-          />
+          <input id="artist_name" name="artist_name" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="Your name" disabled={busy} />
         </div>
 
         <div>
           <label htmlFor="city" className="block mb-1">City *</label>
-          <input
-            id="city"
-            name="city"
-            required
-            className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
-            placeholder="City"
-            disabled={busy}
-          />
+          <input id="city" name="city" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="City" disabled={busy} />
         </div>
 
         <div>
           <label htmlFor="year" className="block mb-1">Year *</label>
-          <input
-            id="year"
-            name="year"
-            type="number"
-            required
-            className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
-            placeholder="2025"
-            disabled={busy}
-          />
+          <input id="year" name="year" type="number" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="2025" disabled={busy} />
         </div>
 
         <div>
           <label htmlFor="runtime" className="block mb-1">Runtime (mm:ss) *</label>
-          <input
-            id="runtime"
-            name="runtime"
-            inputMode="numeric"
-            pattern="^\d{1,3}:[0-5]\d$"
-            required
-            className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
-            placeholder="13:40"
-            title="Use mm:ss, for example 07:30 or 13:40"
-            disabled={busy}
-          />
+          <input id="runtime" name="runtime" inputMode="numeric" pattern="^\d{1,3}:[0-5]\d$" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="13:40" title="Use mm:ss, for example 07:30 or 13:40" disabled={busy} />
         </div>
 
         <div>
           <label htmlFor="file" className="block mb-1">Video file (.mp4 or .mov, max 3 GB) *</label>
-          <input
-            id="file"
-            name="file"
-            type="file"
-            accept=".mp4,.mov,video/mp4,video/quicktime"
-            required
-            className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
-            disabled={busy}
-          />
-         
+          <input id="file" name="file" type="file" accept=".mp4,.mov,video/mp4,video/quicktime" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" disabled={busy} />
+          <p className="mt-1 text-xs opacity-80">Use H.264 for the video track.</p>
         </div>
 
-        <button
-          type="submit"
-          className="rounded border border-white/30 px-4 py-2 hover:bg-white/10 disabled:opacity-60"
-          disabled={busy}
-        >
+        <button type="submit" className="rounded border border-white/30 px-4 py-2 hover:bg-white/10 disabled:opacity-60" disabled={busy}>
           {busy ? (phase === 'upload' ? 'Uploading…' : 'Saving…') : 'Submit'}
         </button>
 
-        {(phase === 'done' || phase === 'error') && msg && (
-          <p className="mt-3 text-sm opacity-80">{msg}</p>
-        )}
+        {(phase === 'done' || phase === 'error') && msg && <p className="mt-3 text-sm opacity-80">{msg}</p>}
       </form>
     </main>
   );
