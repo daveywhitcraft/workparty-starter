@@ -55,6 +55,23 @@ export default function SubmitPage() {
         return;
       }
 
+      // Minimal client checks: type and size
+      const ext = file.name.split('.').pop()?.toLowerCase();
+      const isAllowedExt = ext === 'mp4' || ext === 'mov';
+      const maxBytes = 3 * 1024 * 1024 * 1024; // 3 GB
+      if (!isAllowedExt) {
+        setPhase('error');
+        setMsg('Use .mp4 or .mov with H.264 video.');
+        setBusy(false);
+        return;
+      }
+      if (file.size > maxBytes) {
+        setPhase('error');
+        setMsg('File is over 3 GB.');
+        setBusy(false);
+        return;
+      }
+
       const safeName = file.name.replace(/\s+/g, '_');
       const path = `submissions/${Date.now()}_${safeName}`;
 
@@ -116,6 +133,16 @@ export default function SubmitPage() {
   return (
     <main className="px-6 pt-28 pb-20">
       <h1 className="text-3xl font-semibold mb-8">Submit your video</h1>
+
+      {/* Simple requirements box */}
+      <div className="max-w-2xl mb-6 rounded border border-white/15 bg-white/5 p-4 text-sm">
+        <p className="font-medium mb-1">Upload requirements</p>
+        <ul className="list-disc ml-5 space-y-1">
+          <li>.mp4 or .mov</li>
+          <li>Video codec: H.264</li>
+          <li>Max size: 3 GB</li>
+        </ul>
+      </div>
 
       <form
         className="max-w-2xl space-y-5"
@@ -189,16 +216,19 @@ export default function SubmitPage() {
         </div>
 
         <div>
-          <label htmlFor="file" className="block mb-1">Video file (MP4, max 3 GB) *</label>
+          <label htmlFor="file" className="block mb-1">Video file (.mp4 or .mov, max 3 GB) *</label>
           <input
             id="file"
             name="file"
             type="file"
-            accept="video/mp4"
+            accept=".mp4,.mov,video/mp4,video/quicktime"
             required
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
             disabled={busy}
           />
+          <p className="mt-1 text-xs opacity-80">
+            Use H.264 for the video track.
+          </p>
         </div>
 
         <button
@@ -209,24 +239,9 @@ export default function SubmitPage() {
           {busy ? (phase === 'upload' ? 'Uploading…' : 'Saving…') : 'Submit'}
         </button>
 
-        {busy && (
-          <div className="mt-3">
-            <div className="h-1 w-full bg-white/10 overflow-hidden rounded">
-              <div className="h-full w-1/3 bg-white/60 animate-[wpbar_1.2s_ease_infinite]" />
-            </div>
-            <style jsx>{`
-              @keyframes wpbar {
-                0% { transform: translateX(-100%); }
-                50% { transform: translateX(50%); }
-                100% { transform: translateX(200%); }
-              }
-            `}</style>
-          </div>
+        {(phase === 'done' || phase === 'error') && msg && (
+          <p className="mt-3 text-sm opacity-80">{msg}</p>
         )}
-
-{(phase === 'done' || phase === 'error') && msg && (
-  <p className="mt-3 text-sm opacity-80">{msg}</p>
-)}
       </form>
     </main>
   );
