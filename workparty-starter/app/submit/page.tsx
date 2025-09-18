@@ -226,9 +226,7 @@ export default function SubmitPage() {
             className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
             disabled={busy}
           />
-          <p className="mt-1 text-xs opacity-80">
-            Use H.264 for the video track.
-          </p>
+        
         </div>
 
         <button
