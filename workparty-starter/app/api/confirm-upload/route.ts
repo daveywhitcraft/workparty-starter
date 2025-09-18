@@ -8,44 +8,29 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json().catch(() => ({}));
 
-    // Accept what your form sends (mm:ss etc.), but only store known columns.
     const {
       title,
       artist_name,
       city,
       year,
-      runtime,          // number (minutes) — ok if missing
-      runtime_seconds,  // optional
-      runtime_mmss,     // optional "mm:ss"
-      storage_bucket = 'videos',
+      runtime,     // rounded minutes from the form
       file_path,
-      status = 'pending',
-      event_id = null,
-      order_index = null,
     } = body || {};
 
-    // Required fields:
     if (!title || !artist_name || !city || !year || !file_path) {
       return NextResponse.json({ error: 'missing fields' }, { status: 400 });
     }
 
     const db = supabaseService();
 
-    // Build the row with ONLY columns that exist in your table
-    const row: Record<string, any> = {
+    const row = {
       title,
       artist_name,
       city,
       year: Number(year),
-      storage_bucket,
+      runtime: runtime ?? null,
       file_path,
-      status,
-      event_id,
-      order_index,
     };
-    if (runtime !== undefined) row.runtime = runtime;
-    if (runtime_seconds !== undefined) row.runtime_seconds = runtime_seconds;
-    if (runtime_mmss !== undefined) row.runtime_mmss = runtime_mmss;
 
     const { data, error } = await db
       .from('submissions')
