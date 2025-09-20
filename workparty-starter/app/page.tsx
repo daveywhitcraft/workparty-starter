@@ -3,51 +3,90 @@ import React from "react";
 
 export default function Page() {
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        display: "grid",
-        placeItems: "center",
-        padding: "2rem",
-        zIndex: 25, // above your layout's z-20
-      }}
-    >
-      <div style={{ textAlign: "center" }}>
-        <div
-          style={{
-            fontSize: "clamp(48px, 12vw, 220px)",
-            lineHeight: 1,
-            fontWeight: 800,
-            letterSpacing: "-0.02em",
-          }}
-        >
-          NEXT WORK.PARTY
-        </div>
+    <>
+      {/* Centered Event Info */}
+      <div
+        style={{
+          position: "fixed",
+          inset: 0,
+          display: "grid",
+          placeItems: "center",
+          padding: "2rem",
+          zIndex: 25,
+          pointerEvents: "none", // allow nav clicks
+        }}
+      >
+        <div style={{ textAlign: "center", pointerEvents: "auto" }}>
+          <div
+            style={{
+              fontSize: "clamp(48px, 12vw, 220px)",
+              lineHeight: 1,
+              fontWeight: 800,
+              letterSpacing: "-0.02em",
+            }}
+          >
+            NEXT WORK.PARTY
+          </div>
 
-        <div
-          style={{
-            fontSize: "clamp(28px, 6.5vw, 110px)",
-            marginTop: "2rem",
-            lineHeight: 1.15,
-          }}
-        >
-          28/10/2025&nbsp;&nbsp;20:00-? <br />
-          Schererstraße 10, 13347 Wedding Berlin
-        </div>
+          <div
+            style={{
+              fontSize: "clamp(28px, 6.5vw, 110px)",
+              marginTop: "2rem",
+              lineHeight: 1.15,
+            }}
+          >
+            28/10/2025&nbsp;&nbsp;20:00-? <br />
+            Schererstraße 10, 13347 Wedding Berlin
+          </div>
 
-        <a
-          href="/submit"
-          style={{
-            display: "inline-block",
-            marginTop: "2.5rem",
-            fontSize: "clamp(28px, 6.5vw, 110px)",
-            textDecoration: "underline",
-          }}
-        >
-          SUBMIT NOW
-        </a>
+          <a
+            href="/submit"
+            style={{
+              display: "inline-block",
+              marginTop: "2.5rem",
+              fontSize: "clamp(28px, 6.5vw, 110px)",
+              textDecoration: "underline",
+            }}
+          >
+            SUBMIT NOW
+          </a>
+        </div>
       </div>
-    </div>
+
+      {/* Blinking Floating Button */}
+      <a
+        href="/submit"
+        style={{
+          position: "fixed",
+          bottom: "2rem",
+          right: "2rem",
+          background: "#e6e6e6",
+          color: "#0b0b0b",
+          padding: "1rem 2rem",
+          borderRadius: "12px",
+          fontWeight: "bold",
+          fontSize: "1.5rem",
+          textDecoration: "none",
+          animation: "blink 1s infinite",
+          zIndex: 50,
+        }}
+      >
+        SUBMIT NOW
+      </a>
+
+      <style jsx global>{`
+        @keyframes blink {
+          0%,
+          50%,
+          100% {
+            opacity: 1;
+          }
+          25%,
+          75% {
+            opacity: 0;
+          }
+        }
+      `}</style>
+    </>
   );
 }
