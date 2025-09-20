@@ -65,9 +65,9 @@ export default function Page() {
           background: "#e6e6e6",
           color: "#0b0b0b",
           padding: "1rem 2rem",
-          borderRadius: "12px",
+          borderRadius: "8px",
           fontWeight: "bold",
-          fontSize: "1.5rem",
+          fontSize: "1rem",
           textDecoration: "none",
           zIndex: 50,
         }}
@@ -81,7 +81,7 @@ export default function Page() {
           0%, 50%, 100% { opacity: 1; }
           25%, 75% { opacity: 0; }
         }
-        .wp-blink-btn { animation: wp-blink 1s infinite; }
+        .wp-blink-btn { animation: wp-blink 5s infinite; }
       `}</style>
     </>
   );
