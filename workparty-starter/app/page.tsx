@@ -1,4 +1,5 @@
 // app/page.tsx
+"use client";
 import React from "react";
 
 export default function Page() {
@@ -12,7 +13,7 @@ export default function Page() {
           display: "grid",
           placeItems: "center",
           padding: "2rem",
-          zIndex: 25,
+          zIndex: 25, // header is z-30 in layout
           pointerEvents: "none", // allow nav clicks
         }}
       >
@@ -56,6 +57,7 @@ export default function Page() {
       {/* Blinking Floating Button */}
       <a
         href="/submit"
+        className="wp-blink-btn"
         style={{
           position: "fixed",
           bottom: "2rem",
@@ -67,25 +69,19 @@ export default function Page() {
           fontWeight: "bold",
           fontSize: "1.5rem",
           textDecoration: "none",
-          animation: "blink 1s infinite",
           zIndex: 50,
         }}
       >
         SUBMIT NOW
       </a>
 
+      {/* styled-jsx needs a Client Component; this is marked with "use client" */}
       <style jsx global>{`
-        @keyframes blink {
-          0%,
-          50%,
-          100% {
-            opacity: 1;
-          }
-          25%,
-          75% {
-            opacity: 0;
-          }
+        @keyframes wp-blink {
+          0%, 50%, 100% { opacity: 1; }
+          25%, 75% { opacity: 0; }
         }
+        .wp-blink-btn { animation: wp-blink 1s infinite; }
       `}</style>
     </>
   );
