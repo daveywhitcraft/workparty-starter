@@ -9,7 +9,6 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 );
 
-// mm:ss → helpers
 function parseMmSs(mmss: string) {
   const m = mmss.match(/^(\d{1,3}):([0-5]\d)$/);
   if (!m) return null;
@@ -25,39 +24,28 @@ function parseMmSs(mmss: string) {
   };
 }
 
-// Slugify any text to a-z0-9.-_
+// strict slug (no accents, only a-z0-9._-)
 function slugify(s: string) {
-  // normalize unicode and drop diacritics
   let out = s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
-  // replace non safe chars with dash
   out = out.replace(/[^a-zA-Z0-9._-]+/g, '-');
-  // collapse dashes and trim
   out = out.replace(/-+/g, '-').replace(/^[-_.]+|[-_.]+$/g, '');
   return out.toLowerCase();
 }
 
-// Build a fully safe storage key
-function buildStorageKey(params: {
-  bucketPrefix: string; // e.g. "submissions"
-  artist: string;
-  title: string;
-  originalName: string; // to keep extension
-}) {
-  const { bucketPrefix, artist, title, originalName } = params;
+// get extension from MIME, never from filename
+function extFromMime(mime: string): 'mp4' | 'mov' {
+  if (mime === 'video/quicktime') return 'mov';
+  return 'mp4';
+}
 
-  // ext
-  const dot = originalName.lastIndexOf('.');
-  const ext = dot > -1 ? originalName.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '') : 'mp4';
-
-  const artistSlug = slugify(artist);
-  const titleSlug = slugify(title);
+// build key without using the original filename
+function buildKey(artist: string, title: string, mime: string) {
+  const artistSlug = slugify(artist) || 'artist';
+  const titleSlug = slugify(title) || 'video';
   const ts = Date.now();
-
-  // join parts with safe separators only
-  const filename = `${ts}_${titleSlug || 'video'}.${ext || 'mp4'}`;
-  const path = `${slugify(bucketPrefix)}/${artistSlug || 'artist'}/${filename}`;
-
-  return path;
+  const ext = extFromMime(mime);
+  // directory prefix inside the bucket
+  return `submissions/${artistSlug}/${ts}_${titleSlug}.${ext}`;
 }
 
 export default function SubmitPage() {
@@ -91,15 +79,18 @@ export default function SubmitPage() {
         return;
       }
 
-      const ext = file.name.split('.').pop()?.toLowerCase();
-      const isAllowedExt = ext === 'mp4' || ext === 'mov';
-      const maxBytes = 3 * 1024 * 1024 * 1024; // 3 GB
-      if (!isAllowedExt) {
+      // accept mp4 or mov by MIME or filename fallback
+      const nameExt = file.name.split('.').pop()?.toLowerCase();
+      const mime = file.type || (nameExt === 'mov' ? 'video/quicktime' : 'video/mp4');
+      const okExt = mime === 'video/mp4' || mime === 'video/quicktime' || nameExt === 'mp4' || nameExt === 'mov';
+      if (!okExt) {
         setPhase('error');
         setMsg('Use .mp4 or .mov with H.264 video.');
         setBusy(false);
         return;
       }
+
+      const maxBytes = 3 * 1024 * 1024 * 1024; // 3 GB
       if (file.size > maxBytes) {
         setPhase('error');
         setMsg('File is over 3 GB.');
@@ -107,19 +98,14 @@ export default function SubmitPage() {
         return;
       }
 
-      // always build a safe key
-      const path = buildStorageKey({
-        bucketPrefix: 'submissions',
-        artist: artist_name,
-        title,
-        originalName: file.name,
-      });
+      // build a key that never includes the original filename
+      const path = buildKey(artist_name, title, mime);
 
       const { error: upErr } = await supabase
         .storage
-        .from('videos') // your bucket
+        .from('videos') // bucket name
         .upload(path, file, {
-          contentType: file.type || 'video/mp4',
+          contentType: mime,
           upsert: false,
         });
 
