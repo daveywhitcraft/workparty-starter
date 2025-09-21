@@ -194,7 +194,6 @@ export default function SubmitPage() {
         <div>
           <label htmlFor="file" className="block mb-1">Video file (.mp4 or .mov, max 3 GB) *</label>
           <input id="file" name="file" type="file" accept=".mp4,.mov,video/mp4,video/quicktime" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" disabled={busy} />
-          <p className="mt-1 text-xs opacity-80">Use H.264 for the video track.</p>
         </div>
 
         <button type="submit" className="rounded border border-white/30 px-4 py-2 hover:bg-white/10 disabled:opacity-60" disabled={busy}>
