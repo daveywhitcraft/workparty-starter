@@ -10,7 +10,6 @@ type Submission = {
   created_at: string;
   title?: string | null;
   file_path?: string | null;
-  storage_bucket?: string | null;
   status?: string | null;
   event_id?: number | null;
 };
@@ -29,16 +28,6 @@ function guessType(path: string) {
   const i = path.lastIndexOf(".");
   const ext = i >= 0 ? path.slice(i + 1).toLowerCase() : "";
   return ["mp4", "m4v", "mov", "webm", "mkv", "avi"].includes(ext) ? "video" : "file";
-}
-
-function ymdUTC(d: Date) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))
-    .toISOString()
-    .slice(0, 10);
-}
-function dayNumber(ymd: string) {
-  const [y, m, d] = ymd.split("-").map(Number);
-  return Math.floor(Date.UTC(y, (m || 1) - 1, d || 1) / 86400000);
 }
 
 export default async function ScreenPage({ params }: PageProps) {
@@ -121,10 +110,10 @@ export default async function ScreenPage({ params }: PageProps) {
     );
   }
 
-  // Fetch only approved submissions
+  // Fetch only approved submissions, no storage_bucket column
   const { data: subs, error: subErr } = await sb
     .from("submissions")
-    .select("id, title, file_path, storage_bucket, status, created_at")
+    .select("id, title, file_path, status, created_at")
     .eq("event_id", evData.id)
     .eq("status", "approved")
     .order("created_at", { ascending: true });
@@ -146,15 +135,16 @@ export default async function ScreenPage({ params }: PageProps) {
     );
   }
 
-  // Prepare signed URLs with key normalization
+  // Prepare signed URLs with bucket default and key normalization
   const { data: bucketList } = await sb.storage.listBuckets();
   const bucketNames = new Set((bucketList || []).map((b) => b.name));
+  // Prefer a bucket named "submissions", else first available
+  const defaultBucket =
+    (bucketNames.has("submissions") ? "submissions" : bucketList?.[0]?.name) || "";
 
   const playlistRaw = await Promise.all(
     rows.map(async (s) => {
-      const possible = [s.storage_bucket || "", "videos", "submissions", "public"].filter(Boolean) as string[];
-      let bucket = possible.find((n) => bucketNames.has(n)) || "";
-      if (!bucket && bucketList?.length) bucket = bucketList[0].name;
+      let bucket = defaultBucket;
 
       let fileUrl: string | null = null;
       let reason: string | null = null;
@@ -163,8 +153,9 @@ export default async function ScreenPage({ params }: PageProps) {
       if (!key) {
         reason = "missing file_path";
       } else if (!bucket) {
-        reason = "no bucket match";
+        reason = "no bucket available";
       } else {
+        // If key accidentally includes the bucket name, strip it
         const pref = `${bucket}/`;
         if (key.startsWith(pref)) key = key.slice(pref.length);
         key = key.replace(/^\/+/, "");
@@ -243,4 +234,3 @@ export default async function ScreenPage({ params }: PageProps) {
     </div>
   );
 }
-
