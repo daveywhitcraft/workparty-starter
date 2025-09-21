@@ -44,7 +44,7 @@ function dayNumber(ymd: string) {
 export default async function ScreenPage({ params }: PageProps) {
   const authed = cookies().get("wp_admin_auth")?.value === "1";
 
-  // server actions (same cookie/password as /admin)
+  // server actions
   async function login(formData: FormData) {
     "use server";
     const pwd = String(formData.get("password") || "");
@@ -65,7 +65,6 @@ export default async function ScreenPage({ params }: PageProps) {
     redirect(`/events/${encodeURIComponent(params.slug)}/screen`);
   }
 
-  // Supabase (service role stays on server)
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const srv = process.env.SUPABASE_SERVICE_ROLE || "";
   const sb = createClient(url, srv, { auth: { persistSession: false } });
@@ -74,14 +73,12 @@ export default async function ScreenPage({ params }: PageProps) {
   const rawSlug = decodeURIComponent(params.slug);
   const normalized = rawSlug.trim().toLowerCase().replace(/\s+/g, "-").replace(/-+/g, "-");
 
-  // 1) exact match
   let { data: evData } = await sb
     .from("events")
     .select("id, slug, title, city, start_at")
     .eq("slug", rawSlug)
     .maybeSingle<EventRow>();
 
-  // 2) fallback exact on normalized
   if (!evData) {
     const { data } = await sb
       .from("events")
@@ -91,7 +88,6 @@ export default async function ScreenPage({ params }: PageProps) {
     evData = data || null;
   }
 
-  // 3) fallback relaxed `ilike` if still missing (prefix match)
   if (!evData) {
     const { data } = await sb
       .from("events")
@@ -103,67 +99,15 @@ export default async function ScreenPage({ params }: PageProps) {
   }
 
   if (!evData) {
-    // If admin, show quick list of available slugs to help click-through
-    let hints: EventRow[] = [];
-    if (authed) {
-      const { data: all } = await sb
-        .from("events")
-        .select("id, slug, title, city, start_at")
-        .order("start_at", { ascending: false })
-        .limit(12);
-      hints = all || [];
-    }
-
     return (
       <div style={{ padding: 24, color: "white", background: "black" }}>
-        <h1 style={{ marginTop: 0 }}>Event not found</h1>
+        <h1>Event not found</h1>
         <p>Slug requested: <strong>{rawSlug}</strong></p>
-        {authed && hints.length > 0 && (
-          <div style={{ marginTop: 12, fontSize: 14, opacity: 0.9 }}>
-            <div style={{ marginBottom: 6 }}>Recent event slugs:</div>
-            <ul>
-              {hints.map((e) => (
-                <li key={e.id}>
-                  <a
-                    style={{ color: "white", textDecoration: "underline" }}
-                    href={`/events/${encodeURIComponent(e.slug)}/screen`}
-                  >
-                    {e.city ? `${e.city} · ` : ""}{e.title || "Untitled"} — {e.slug}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     );
   }
 
- // Public window logic (commented out so only admins can view)
-  /* 
-  const todayKey = ymdUTC(new Date());
-  const eventKey = evData.start_at ? new Date(evData.start_at).toISOString().slice(0, 10) : "";
-  const publicAllowed = !!eventKey && Math.abs(dayNumber(todayKey) - dayNumber(eventKey)) <= 1;
-
-  if (!authed && !publicAllowed) {
-    return (
-      <div style={{ padding: 24, maxWidth: 520, color: "white", background: "black" }}>
-        <h1 style={{ margin: 0 }}>Screening Locked</h1>
-        <p style={{ marginTop: 8 }}>
-          Public window: <strong>{eventKey || "TBA"}</strong> plus the day before and after (UTC).
-        </p>
-        <p style={{ marginTop: 8, opacity: 0.85, fontSize: 14 }}>
-          Admin may unlock with the password.
-        </p>
-        <form action={login} style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <input name="password" type="password" placeholder="Admin password" style={{ padding: 10, flex: 1 }} required />
-          <button type="submit" style={{ padding: "10px 12px" }}>Unlock</button>
-        </form>
-      </div>
-    );
-  }
- */
-  // Simple: block everyone except admin
+  // Lock for non-admins
   if (!authed) {
     return (
       <div style={{ padding: 24, maxWidth: 520, color: "white", background: "black" }}>
@@ -176,10 +120,11 @@ export default async function ScreenPage({ params }: PageProps) {
       </div>
     );
   }
-  // Fetch approved submissions for this event (screening order = oldest → newest)
+
+  // Fetch only approved submissions
   const { data: subs, error: subErr } = await sb
     .from("submissions")
-    .select("*")
+    .select("id, title, file_path, storage_bucket, status, created_at")
     .eq("event_id", evData.id)
     .eq("status", "approved")
     .order("created_at", { ascending: true });
@@ -201,7 +146,7 @@ export default async function ScreenPage({ params }: PageProps) {
     );
   }
 
-  // Prepare signed URLs
+  // Prepare signed URLs with key normalization
   const { data: bucketList } = await sb.storage.listBuckets();
   const bucketNames = new Set((bucketList || []).map((b) => b.name));
 
@@ -212,24 +157,45 @@ export default async function ScreenPage({ params }: PageProps) {
       if (!bucket && bucketList?.length) bucket = bucketList[0].name;
 
       let fileUrl: string | null = null;
-      if (bucket && s.file_path) {
-        const { data: signed } = await sb.storage.from(bucket).createSignedUrl(s.file_path, 60 * 60 * 12);
-        fileUrl = signed?.signedUrl || null;
+      let reason: string | null = null;
+      let key = s.file_path || "";
+
+      if (!key) {
+        reason = "missing file_path";
+      } else if (!bucket) {
+        reason = "no bucket match";
+      } else {
+        const pref = `${bucket}/`;
+        if (key.startsWith(pref)) key = key.slice(pref.length);
+        key = key.replace(/^\/+/, "");
+
+        const { data: signed, error } = await sb.storage.from(bucket).createSignedUrl(key, 60 * 60 * 12);
+        if (error) {
+          reason = `sign error: ${error.message}`;
+        } else {
+          fileUrl = signed?.signedUrl || null;
+          if (!fileUrl) reason = "no signed url";
+        }
       }
+
+      const type = s.file_path ? guessType(s.file_path) : "file";
+      if (type !== "video" && !reason) reason = `type ${type}`;
+
       return {
         id: s.id,
         title: s.title || s.file_path || s.id,
-        src: fileUrl as string | null,
-        type: s.file_path ? guessType(s.file_path) : "file",
+        src: fileUrl,
+        type,
+        reason,
+        meta: { status: s.status, bucket, file_path: s.file_path || "", key },
       };
     })
   );
 
-  const playlist: { id: string; title: string; src: string }[] = playlistRaw
-    .filter((p): p is { id: string; title: string; src: string; type: string } => !!p.src && p.type === "video")
-    .map((p) => ({ id: p.id, title: p.title, src: p.src }));
+  const playable = playlistRaw.filter(p => p.src && p.type === "video");
+  const skipped = playlistRaw.filter(p => !p.src || p.type !== "video");
 
-  if (playlist.length === 0) {
+  if (playable.length === 0) {
     return (
       <div style={{ padding: 24, color: "white", background: "black" }}>
         No playable videos found for this event.
@@ -240,15 +206,41 @@ export default async function ScreenPage({ params }: PageProps) {
   return (
     <div className="fixed inset-0 bg-black">
       {authed && (
-        <div style={{ position: "fixed", top: 8, right: 8, zIndex: 10 }}>
+        <div style={{ position: "fixed", top: 8, right: 8, zIndex: 10, display: "flex", gap: 8 }}>
           <form action={logout}>
             <button type="submit" style={{ fontSize: 12, padding: "6px 10px" }}>
               Log out
             </button>
           </form>
+
+          {skipped.length > 0 && (
+            <details style={{ fontSize: 12 }}>
+              <summary style={{ cursor: "pointer" }}>
+                Skipped {skipped.length} / {playlistRaw.length}
+              </summary>
+              <div style={{ maxWidth: 420, maxHeight: 240, overflow: "auto", padding: 8, background: "#111", border: "1px solid #333", borderRadius: 6 }}>
+                <ul style={{ margin: 0, paddingLeft: 16 }}>
+                  {skipped.map(s => (
+                    <li key={s.id} style={{ marginBottom: 6 }}>
+                      <div style={{ fontWeight: 600 }}>{s.title}</div>
+                      <div>Status: {s.meta.status || "?"}</div>
+                      <div>Reason: {s.reason || "unknown"}</div>
+                      <div>Bucket: {s.meta.bucket || "?"}</div>
+                      <div>Path: {s.meta.file_path}</div>
+                      <div>Key used: {s.meta.key}</div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </details>
+          )}
         </div>
       )}
-      <Player playlist={playlist} />
+
+      <Player
+        playlist={playable.map(p => ({ id: p.id, title: p.title, src: p.src as string }))}
+      />
     </div>
   );
 }
+
