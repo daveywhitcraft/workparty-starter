@@ -36,7 +36,7 @@ export default function Page() {
               lineHeight: 1.15,
             }}
           >
-            28/10/2025&nbsp;&nbsp;20:00-? <br />
+            28/09/2025&nbsp;&nbsp;20:00-? <br />
             Schererstraße 10, 13347 Wedding Berlin
           </div>
 
