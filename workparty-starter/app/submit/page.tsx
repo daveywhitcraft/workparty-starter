@@ -9,44 +9,55 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 );
 
+// mm:ss → helpers
 function parseMmSs(mmss: string) {
   const m = mmss.match(/^(\d{1,3}):([0-5]\d)$/);
   if (!m) return null;
   const minutes = parseInt(m[1], 10);
   const seconds = parseInt(m[2], 10);
   const totalSeconds = minutes * 60 + seconds;
-  const runtimeMinutesRounded = minutes + (seconds >= 30 ? 1 : 0);
+  const minutesRounded = minutes + (seconds >= 30 ? 1 : 0);
   return {
     mmss,
     totalSeconds,
-    minutesRounded: runtimeMinutesRounded,
+    minutesRounded,
     minutesExact: +(totalSeconds / 60).toFixed(2),
   };
 }
 
-// Strict filename sanitizer for Supabase object keys
-function sanitizeFilename(name: string) {
-  // split name and extension
-  const dot = name.lastIndexOf('.');
-  const base = dot > -1 ? name.slice(0, dot) : name;
-  const ext  = dot > -1 ? name.slice(dot + 1) : 'mp4';
+// Slugify any text to a-z0-9.-_
+function slugify(s: string) {
+  // normalize unicode and drop diacritics
+  let out = s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  // replace non safe chars with dash
+  out = out.replace(/[^a-zA-Z0-9._-]+/g, '-');
+  // collapse dashes and trim
+  out = out.replace(/-+/g, '-').replace(/^[-_.]+|[-_.]+$/g, '');
+  return out.toLowerCase();
+}
 
-  // unicode normalize then strip diacritics
-  let clean = base.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+// Build a fully safe storage key
+function buildStorageKey(params: {
+  bucketPrefix: string; // e.g. "submissions"
+  artist: string;
+  title: string;
+  originalName: string; // to keep extension
+}) {
+  const { bucketPrefix, artist, title, originalName } = params;
 
-  // replace apostrophes, quotes, commas, parentheses and other punctuation with separators
-  clean = clean.replace(/[^a-zA-Z0-9._-]+/g, '-');
+  // ext
+  const dot = originalName.lastIndexOf('.');
+  const ext = dot > -1 ? originalName.slice(dot + 1).toLowerCase().replace(/[^a-z0-9]/g, '') : 'mp4';
 
-  // collapse repeats and trim separators
-  clean = clean.replace(/-+/g, '-').replace(/^[-_.]+|[-_.]+$/g, '');
+  const artistSlug = slugify(artist);
+  const titleSlug = slugify(title);
+  const ts = Date.now();
 
-  // lower-case
-  clean = clean.toLowerCase();
+  // join parts with safe separators only
+  const filename = `${ts}_${titleSlug || 'video'}.${ext || 'mp4'}`;
+  const path = `${slugify(bucketPrefix)}/${artistSlug || 'artist'}/${filename}`;
 
-  // keep a safe extension
-  const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6) || 'mp4';
-
-  return `${clean || 'file'}.${safeExt}`;
+  return path;
 }
 
 export default function SubmitPage() {
@@ -96,12 +107,17 @@ export default function SubmitPage() {
         return;
       }
 
-      const safeName = sanitizeFilename(file.name);
-      const path = `submissions/${Date.now()}_${safeName}`;
+      // always build a safe key
+      const path = buildStorageKey({
+        bucketPrefix: 'submissions',
+        artist: artist_name,
+        title,
+        originalName: file.name,
+      });
 
       const { error: upErr } = await supabase
         .storage
-        .from('videos') // bucket name
+        .from('videos') // your bucket
         .upload(path, file, {
           contentType: file.type || 'video/mp4',
           upsert: false,
@@ -126,9 +142,8 @@ export default function SubmitPage() {
           city,
           year,
           runtime: parsed.minutesRounded,
+          storage_bucket: 'videos',
           file_path: path,
-          // add storage_bucket if your API/table expects it:
-          // storage_bucket: 'videos',
         }),
       });
 
@@ -164,10 +179,7 @@ export default function SubmitPage() {
         </ul>
       </div>
 
-      <form
-        className="max-w-2xl space-y-5"
-        onSubmit={onSubmit}
-      >
+      <form className="max-w-2xl space-y-5" onSubmit={onSubmit}>
         <div>
           <label htmlFor="title" className="block mb-1">Title *</label>
           <input id="title" name="title" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="Title" disabled={busy} />
