@@ -9,25 +9,50 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string
 );
 
+function parseMmSs(mmss: string) {
+  const m = mmss.match(/^(\d{1,3}):([0-5]\d)$/);
+  if (!m) return null;
+  const minutes = parseInt(m[1], 10);
+  const seconds = parseInt(m[2], 10);
+  const totalSeconds = minutes * 60 + seconds;
+  const runtimeMinutesRounded = minutes + (seconds >= 30 ? 1 : 0);
+  return {
+    mmss,
+    totalSeconds,
+    minutesRounded: runtimeMinutesRounded,
+    minutesExact: +(totalSeconds / 60).toFixed(2),
+  };
+}
+
+// Strict filename sanitizer for Supabase object keys
+function sanitizeFilename(name: string) {
+  // split name and extension
+  const dot = name.lastIndexOf('.');
+  const base = dot > -1 ? name.slice(0, dot) : name;
+  const ext  = dot > -1 ? name.slice(dot + 1) : 'mp4';
+
+  // unicode normalize then strip diacritics
+  let clean = base.normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+
+  // replace apostrophes, quotes, commas, parentheses and other punctuation with separators
+  clean = clean.replace(/[^a-zA-Z0-9._-]+/g, '-');
+
+  // collapse repeats and trim separators
+  clean = clean.replace(/-+/g, '-').replace(/^[-_.]+|[-_.]+$/g, '');
+
+  // lower-case
+  clean = clean.toLowerCase();
+
+  // keep a safe extension
+  const safeExt = ext.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6) || 'mp4';
+
+  return `${clean || 'file'}.${safeExt}`;
+}
+
 export default function SubmitPage() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [phase, setPhase] = useState<'idle' | 'upload' | 'save' | 'done' | 'error'>('idle');
-
-  function parseMmSs(mmss: string) {
-    const m = mmss.match(/^(\d{1,3}):([0-5]\d)$/);
-    if (!m) return null;
-    const minutes = parseInt(m[1], 10);
-    const seconds = parseInt(m[2], 10);
-    const totalSeconds = minutes * 60 + seconds;
-    const runtimeMinutesRounded = minutes + (seconds >= 30 ? 1 : 0);
-    return {
-      mmss,
-      totalSeconds,
-      minutesRounded: runtimeMinutesRounded,
-      minutesExact: +(totalSeconds / 60).toFixed(2),
-    };
-  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -55,7 +80,6 @@ export default function SubmitPage() {
         return;
       }
 
-      // minimal client checks
       const ext = file.name.split('.').pop()?.toLowerCase();
       const isAllowedExt = ext === 'mp4' || ext === 'mov';
       const maxBytes = 3 * 1024 * 1024 * 1024; // 3 GB
@@ -72,12 +96,12 @@ export default function SubmitPage() {
         return;
       }
 
-      const safeName = file.name.replace(/\s+/g, '_');
+      const safeName = sanitizeFilename(file.name);
       const path = `submissions/${Date.now()}_${safeName}`;
 
       const { error: upErr } = await supabase
         .storage
-        .from('videos')
+        .from('videos') // bucket name
         .upload(path, file, {
           contentType: file.type || 'video/mp4',
           upsert: false,
@@ -93,7 +117,6 @@ export default function SubmitPage() {
       setPhase('save');
       setMsg('Saving…');
 
-      // payload without storage_bucket and status
       const resp = await fetch('/api/confirm-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -104,6 +127,8 @@ export default function SubmitPage() {
           year,
           runtime: parsed.minutesRounded,
           file_path: path,
+          // add storage_bucket if your API/table expects it:
+          // storage_bucket: 'videos',
         }),
       });
 
@@ -141,9 +166,6 @@ export default function SubmitPage() {
 
       <form
         className="max-w-2xl space-y-5"
-        action="/api/submit"
-        method="post"
-        encType="multipart/form-data"
         onSubmit={onSubmit}
       >
         <div>
