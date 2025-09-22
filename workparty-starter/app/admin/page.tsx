@@ -135,12 +135,46 @@ export default async function AdminPage({
     redirect('/admin');
   }
 
+  // ---- NEW: create event (server action) ----
+  async function createEvent(formData: FormData) {
+    'use server';
+    const title = String(formData.get('title') || '').trim();
+    const city = String(formData.get('city') || '').trim();
+    const slug = String(formData.get('slug') || '').trim().toLowerCase();
+    const start_at = String(formData.get('start_at') || '').trim();
+
+    if (!title || !city || !slug || !start_at) {
+      redirect('/admin?err=ev-missing');
+    }
+
+    const { data, error } = await supabaseService()
+      .from('events')
+      .insert({ title, city, slug, start_at })
+      .select('id')
+      .single();
+
+    if (error || !data) {
+      redirect('/admin?err=ev-insert');
+    }
+
+    // Jump straight to admin filtered to this event
+    redirect(`/admin?event=${data.id}`);
+  }
+
   // helpers to only show controls when the column exists
   const has = (row: any, key: string) => Object.prototype.hasOwnProperty.call(row, key);
   const fileUrl = (row: any) =>
     has(row, 'file_path') && row.file_path
       ? `/api/public-url?path=${encodeURIComponent(row.file_path)}`
       : '';
+
+  const err = searchParams?.err;
+  const eventErr =
+    err === 'ev-missing'
+      ? 'Please fill Title, City, Slug, and Start time.'
+      : err === 'ev-insert'
+      ? 'Could not create event (check Supabase).'
+      : null;
 
   return (
     <main className="px-6 pt-28 pb-20 space-y-12">
@@ -152,6 +186,68 @@ export default async function AdminPage({
           </button>
         </form>
       </div>
+
+      {/* NEW: Create Event */}
+      <section className="max-w-3xl">
+        <h2 className="text-xl font-semibold mb-4">Add Event</h2>
+
+        {eventErr && (
+          <div className="mb-3 rounded border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm">
+            {eventErr}
+          </div>
+        )}
+
+        <form action={createEvent} className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <label className="block">
+            <div className="mb-1 text-sm opacity-80">Title</div>
+            <input
+              name="title"
+              required
+              className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+              placeholder="WORK.PARTY Berlin 002"
+            />
+          </label>
+
+          <label className="block">
+            <div className="mb-1 text-sm opacity-80">City</div>
+            <input
+              name="city"
+              required
+              className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+              placeholder="Berlin"
+            />
+          </label>
+
+          <label className="block">
+            <div className="mb-1 text-sm opacity-80">Slug</div>
+            <input
+              name="slug"
+              required
+              className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+              placeholder="berlin-2025-10"
+            />
+          </label>
+
+          <label className="block">
+            <div className="mb-1 text-sm opacity-80">Start time (ISO)</div>
+            <input
+              name="start_at"
+              required
+              className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+              placeholder="2025-10-15T19:00:00+02:00"
+            />
+          </label>
+
+          <div className="md:col-span-2">
+            <button
+              type="submit"
+              className="rounded border border-white/30 px-4 py-2 hover:bg-white/10"
+            >
+              Create event
+            </button>
+          </div>
+        </form>
+      </section>
 
       {/* Submissions */}
       <section className="max-w-6xl">
@@ -259,7 +355,7 @@ export default async function AdminPage({
                             name="order_index"
                             defaultValue={row.order_index ?? ''}
                             className="w-20 rounded border border-white/20 bg-black/30 px-2 py-1"
-                            placeholder="—"
+                            placeholder="-"
                             step={1}
                           />
                           <button type="submit" className="rounded border border-white/30 px-2 py-1 hover:bg-white/10">
@@ -321,7 +417,7 @@ export default async function AdminPage({
         </div>
       </section>
 
-      {/* Events (read-only) */}
+      {/* Events (read-only list) */}
       <section className="max-w-3xl">
         <h2 className="text-xl font-semibold mb-4">Events</h2>
         <div className="divide-y divide-white/10 border border-white/10 rounded">
