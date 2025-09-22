@@ -231,9 +231,7 @@ export default async function AdminPage({
           </button>
         </form>
 
-        <p className="mt-2 text-xs opacity-70">
-          Slug and start time are created automatically.
-        </p>
+       
       </section>
 
       {/* Submissions */}
