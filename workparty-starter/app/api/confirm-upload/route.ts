@@ -4,63 +4,64 @@ export const runtime = 'nodejs';
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseService } from '@/lib/supabaseServer';
 
-type Body = {
-  title: string;
-  artist_name: string;
-  city: string;
-  year: number;
-  runtime: number; // minutes (rounded)
-  storage_bucket: string;
-  file_path: string;
-  email?: string | null; // NEW optional
-  event_id?: number | null;
-};
-
 export async function POST(req: NextRequest) {
   try {
-    const b = (await req.json()) as Partial<Body>;
+    // tolerate bad/missing JSON
+    const raw = (await req.json().catch(() => ({}))) as Record<string, any>;
 
-    // minimal checks
-    if (
-      !b?.title ||
-      !b?.artist_name ||
-      !b?.city ||
-      typeof b?.year !== 'number' ||
-      typeof b?.runtime !== 'number' ||
-      !b?.storage_bucket ||
-      !b?.file_path
-    ) {
-      return NextResponse.json({ error: 'missing fields' }, { status: 400 });
-    }
+    // coerce/trim everything
+    const title = String(raw.title ?? '').trim();
+    const artist_name = String(raw.artist_name ?? '').trim();
+    const city = String(raw.city ?? '').trim();
+    const file_path = String(raw.file_path ?? '').trim();
 
-    // sanitize/normalize email lightly
-    const email = (b.email || '').toString().trim() || null;
+    // year & runtime can arrive as strings; coerce to numbers if possible
+    const yearNum =
+      typeof raw.year === 'number'
+        ? raw.year
+        : Number(String(raw.year ?? '').trim());
+    const runtimeNum =
+      typeof raw.runtime === 'number'
+        ? raw.runtime
+        : Number(String(raw.runtime ?? '').trim());
+    const email =
+      raw.email != null && String(raw.email).trim() !== ''
+        ? String(raw.email).trim()
+        : null;
+
+    // validate requireds and report which one failed
+    if (!title) return NextResponse.json({ error: "missing 'title'" }, { status: 400 });
+    if (!artist_name) return NextResponse.json({ error: "missing 'artist_name'" }, { status: 400 });
+    if (!city) return NextResponse.json({ error: "missing 'city'" }, { status: 400 });
+    if (!file_path) return NextResponse.json({ error: "missing 'file_path'" }, { status: 400 });
+    if (!yearNum || Number.isNaN(yearNum))
+      return NextResponse.json({ error: "missing or invalid 'year'" }, { status: 400 });
 
     const row = {
-      title: b.title,
-      artist_name: b.artist_name,
-      city: b.city,
-      year: b.year,
-      runtime: b.runtime,
-      storage_bucket: b.storage_bucket,
-      file_path: b.file_path,
+      title,
+      artist_name,
+      city,
+      year: yearNum,
+      runtime: Number.isNaN(runtimeNum) ? null : runtimeNum, // optional
+      file_path,
+      email,                                                 // optional/private
       status: 'pending',
-      event_id: b.event_id ?? null,
-      email, // NEW
     };
 
     const { data, error } = await supabaseService()
       .from('submissions')
-      .insert(row)
+      .insert([row])
       .select('id')
       .single();
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 400 });
+      console.error('confirm-upload insert error:', error);
+      return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true, id: data.id });
   } catch (err: any) {
+    console.error('confirm-upload server error:', err);
     return NextResponse.json(
       { error: err?.message || 'server error' },
       { status: 500 }
