@@ -120,6 +120,7 @@ export default function SubmitPage() {
       setPhase('save');
       setMsg('Saving…');
 
+      // NOTE: storage_bucket removed to match your DB schema
       const resp = await fetch('/api/confirm-upload', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -129,9 +130,8 @@ export default function SubmitPage() {
           city,
           year,
           runtime: parsed.minutesRounded,
-          storage_bucket: 'videos',
           file_path: path,
-          email: email || null, // NEW
+          email: email || null, // private; visible only to admins
         }),
       });
 
@@ -190,20 +190,20 @@ export default function SubmitPage() {
 
         <div>
           <label htmlFor="runtime" className="block mb-1">Runtime (mm:ss) *</label>
-<input
-  id="runtime"
-  name="runtime"
-  inputMode="numeric"
-  pattern="[0-9]{1,3}:[0-5][0-9]"
-  required
-  className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
-  placeholder="13:40"
-  title="Use mm:ss, for example 07:30 or 13:40"
-  disabled={busy}
-/>
+          <input
+            id="runtime"
+            name="runtime"
+            inputMode="numeric"
+            pattern="[0-9]{1,3}:[0-5][0-9]"
+            required
+            className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+            placeholder="13:40"
+            title="Use mm:ss, for example 07:30 or 13:40"
+            disabled={busy}
+          />
         </div>
 
-        {/* NEW: Email (optional, admin-only visibility later) */}
+        {/* Email (optional, kept private) */}
         <div>
           <label htmlFor="email" className="block mb-1">Email (kept private)</label>
           <input id="email" name="email" type="email" className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="you@example.com" disabled={busy} />
