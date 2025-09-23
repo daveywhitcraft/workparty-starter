@@ -69,6 +69,7 @@ export default function SubmitPage() {
       const city = String(data.get('city') || '');
       const year = Number(data.get('year') || 0);
       const runtimeStr = String(data.get('runtime') || '');
+      const email = String(data.get('email') || '').trim(); // NEW
       const file = data.get('file') as File | null;
 
       const parsed = parseMmSs(runtimeStr);
@@ -130,6 +131,7 @@ export default function SubmitPage() {
           runtime: parsed.minutesRounded,
           storage_bucket: 'videos',
           file_path: path,
+          email: email || null, // NEW
         }),
       });
 
@@ -188,7 +190,14 @@ export default function SubmitPage() {
 
         <div>
           <label htmlFor="runtime" className="block mb-1">Runtime (mm:ss) *</label>
-          <input id="runtime" name="runtime" inputMode="numeric" pattern="^\d{1,3}:[0-5]\d$" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="13:40" title="Use mm:ss, for example 07:30 or 13:40" disabled={busy} />
+          <input id="runtime" name="runtime" inputMode="numeric" pattern="^\\d{1,3}:[0-5]\\d$" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="13:40" title="Use mm:ss, for example 07:30 or 13:40" disabled={busy} />
+        </div>
+
+        {/* NEW: Email (optional, admin-only visibility later) */}
+        <div>
+          <label htmlFor="email" className="block mb-1">Email (kept private)</label>
+          <input id="email" name="email" type="email" className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="you@example.com" disabled={busy} />
+          <p className="mt-1 text-xs opacity-70">Only admins can see this. It won’t appear on the public pages.</p>
         </div>
 
         <div>
