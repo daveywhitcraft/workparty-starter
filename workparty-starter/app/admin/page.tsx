@@ -141,16 +141,15 @@ export default async function AdminPage({
     const title = String(formData.get('title') || '').trim();
     if (!title) redirect('/admin?err=ev-missing');
 
-    // slugify: lowercase, spaces/punct -> hyphens, collapse dups, trim hyphens
+    // slugify
     const base = title
       .toLowerCase()
       .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')        // strip accents
-      .replace(/[^a-z0-9]+/g, '-')           // non-alnum -> -
-      .replace(/^-+|-+$/g, '')               // trim -
-      || 'event';
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'event';
 
-    // ensure uniqueness: if slug exists, append -2, -3, ...
+    // ensure uniqueness
     const svc = supabaseService();
     const { data: existing } = await svc
       .from('events')
@@ -159,12 +158,10 @@ export default async function AdminPage({
     const taken = new Set((existing ?? []).map(r => r.slug));
     let slug = base;
     let i = 2;
-    while (taken.has(slug)) {
-      slug = `${base}-${i++}`;
-    }
+    while (taken.has(slug)) slug = `${base}-${i++}`;
 
     const start_at = new Date().toISOString(); // now
-    const city = ''; // kept blank; adjust later if you add a city picker
+    const city = '';
 
     const { data, error } = await svc
       .from('events')
@@ -172,11 +169,7 @@ export default async function AdminPage({
       .select('id')
       .single();
 
-    if (error || !data) {
-      redirect('/admin?err=ev-insert');
-    }
-
-    // jump straight to filtered admin view for the new event
+    if (error || !data) redirect('/admin?err=ev-insert');
     redirect(`/admin?event=${data.id}`);
   }
 
@@ -206,7 +199,7 @@ export default async function AdminPage({
         </form>
       </div>
 
-      {/* NEW: Create Event (title only) */}
+      {/* Create Event (title only) */}
       <section className="max-w-3xl">
         <h2 className="text-xl font-semibold mb-4">Add Event</h2>
 
@@ -230,8 +223,6 @@ export default async function AdminPage({
             Create event
           </button>
         </form>
-
-       
       </section>
 
       {/* Submissions */}
@@ -245,6 +236,12 @@ export default async function AdminPage({
                 <th className="text-left px-3 py-2">Title</th>
                 <th className="text-left px-3 py-2">Artist</th>
                 <th className="text-left px-3 py-2">City</th>
+
+                {/* NEW: Email header if present */}
+                {submissions.some(r => has(r, 'email')) && (
+                  <th className="text-left px-3 py-2">Email</th>
+                )}
+
                 {/* optional columns */}
                 {submissions.some(r => has(r, 'year')) && <th className="text-left px-3 py-2">Year</th>}
                 {submissions.some(r => has(r, 'runtime') || has(r, 'runtime_mmss')) && (
@@ -276,6 +273,14 @@ export default async function AdminPage({
 
                     <td className="px-3 py-2">{row.artist_name ?? ''}</td>
                     <td className="px-3 py-2">{row.city ?? ''}</td>
+
+                    {/* NEW: Email cell if present */}
+                    {has(row, 'email') && (
+                      <td className="px-3 py-2">
+                        {row.email ?? ''}
+                      </td>
+                    )}
+
                     {has(row, 'year') && <td className="px-3 py-2">{row.year ?? ''}</td>}
                     {(has(row, 'runtime') || has(row, 'runtime_mmss')) && (
                       <td className="px-3 py-2">{runtimeLabel}</td>
