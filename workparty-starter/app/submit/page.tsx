@@ -190,7 +190,17 @@ export default function SubmitPage() {
 
         <div>
           <label htmlFor="runtime" className="block mb-1">Runtime (mm:ss) *</label>
-          <input id="runtime" name="runtime" inputMode="numeric" pattern="^\\d{1,3}:[0-5]\\d$" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="13:40" title="Use mm:ss, for example 07:30 or 13:40" disabled={busy} />
+<input
+  id="runtime"
+  name="runtime"
+  inputMode="numeric"
+  pattern="[0-9]{1,3}:[0-5][0-9]"
+  required
+  className="w-full rounded border border-white/20 bg-black/30 px-3 py-2"
+  placeholder="13:40"
+  title="Use mm:ss, for example 07:30 or 13:40"
+  disabled={busy}
+/>
         </div>
 
         {/* NEW: Email (optional, admin-only visibility later) */}
