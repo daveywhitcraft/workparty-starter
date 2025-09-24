@@ -205,9 +205,8 @@ export default function SubmitPage() {
 
         {/* Email (optional, kept private) */}
         <div>
-          <label htmlFor="email" className="block mb-1">Email (kept private)</label>
+          <label htmlFor="email" className="block mb-1">Email</label>
           <input id="email" name="email" type="email" className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" placeholder="you@example.com" disabled={busy} />
-          <p className="mt-1 text-xs opacity-70">Only admins can see this. It won’t appear on the public pages.</p>
         </div>
 
         <div>
