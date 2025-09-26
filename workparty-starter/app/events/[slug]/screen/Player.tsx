@@ -6,8 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 export type PlaylistItem = {
   id: string;
   title: string;
-  bucket: string;
-  path: string;
+  path: string; // we build the URL via /api/public-url
 };
 
 type Props = {
@@ -18,15 +17,15 @@ type Props = {
   autoPlay?: boolean;
 };
 
-function buildPublicUrl(item: PlaylistItem) {
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  return `${base}/storage/v1/object/public/${item.bucket}/${item.path}`;
+function buildUrl(path: string) {
+  // Use the same helper route Admin uses so we don't need bucket names
+  return `/api/public-url?path=${encodeURIComponent(path)}`;
 }
 
 export default function Player({
   items,
   startIndex = 0,
-  muted = true,
+  muted = false,
   loopAll = true,
   autoPlay = true,
 }: Props) {
@@ -37,10 +36,9 @@ export default function Player({
 
   const src = useMemo(() => {
     if (items.length === 0) return "";
-    return buildPublicUrl(items[idx]);
+    return buildUrl(items[idx].path);
   }, [items, idx]);
 
-  // Advance on ended
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -48,29 +46,23 @@ export default function Player({
     const onEnded = () => {
       if (items.length === 0) return;
       const next = idx + 1;
-      if (next < items.length) {
-        setIdx(next);
-      } else if (loopAll) {
-        setIdx(0);
-      }
+      if (next < items.length) setIdx(next);
+      else if (loopAll) setIdx(0);
     };
 
     el.addEventListener("ended", onEnded);
     return () => el.removeEventListener("ended", onEnded);
   }, [idx, items.length, loopAll]);
 
-  // Autoplay current source when it changes
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
-    const play = async () => {
+    const tryPlay = async () => {
       try {
         if (autoPlay) await el.play();
-      } catch {
-        // ignore autoplay rejections
-      }
+      } catch {}
     };
-    play();
+    tryPlay();
   }, [src, autoPlay]);
 
   if (items.length === 0) {
@@ -81,17 +73,33 @@ export default function Player({
     );
   }
 
+  const handleError = () => {
+    const next = idx + 1;
+    if (next < items.length) setIdx(next);
+    else if (loopAll) setIdx(0);
+  };
+
+  const handleLoadedData = async () => {
+    const el = videoRef.current;
+    if (!el) return;
+    try {
+      if (autoPlay) await el.play();
+    } catch {}
+  };
+
   return (
     <div style={{ width: "100vw", height: "100vh", background: "black" }}>
       <video
         ref={videoRef}
-        /* key removed to preserve fullscreen across source changes */
+        key={src}
         src={src}
         controls={true}
         muted={muted}
         playsInline
         autoPlay={autoPlay}
         preload="auto"
+        onError={handleError}
+        onLoadedData={handleLoadedData}
         style={{
           width: "100%",
           height: "100%",
@@ -102,3 +110,5 @@ export default function Player({
     </div>
   );
 }
+
+
