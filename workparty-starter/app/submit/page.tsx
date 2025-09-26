@@ -213,11 +213,11 @@ export default function SubmitPage() {
           <label htmlFor="file" className="block mb-1">Video file (.mp4 or .mov, max 3 GB) *</label>
           <input id="file" name="file" type="file" accept=".mp4,.mov,video/mp4,video/quicktime" required className="w-full rounded border border-white/20 bg-black/30 px-3 py-2" disabled={busy} />
         </div>
-
+{/*
         <button type="submit" className="rounded border border-white/30 px-4 py-2 hover:bg-white/10 disabled:opacity-60" disabled={busy}>
           {busy ? (phase === 'upload' ? 'Uploading…' : 'Saving…') : 'Submit'}
         </button>
-
+*/}
         {(phase === 'done' || phase === 'error') && msg && <p className="mt-3 text-sm opacity-80">{msg}</p>}
       </form>
     </main>
