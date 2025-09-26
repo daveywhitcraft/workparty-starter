@@ -77,7 +77,8 @@ export default function Page() {
       </a>
 
       {/* styled-jsx needs a Client Component; this is marked with "use client" */}
-      <style jsx global>{`
+   {/*
+   <style jsx global>{`
         @keyframes wp-blink {
           0%, 50%, 100% { opacity: 1; }
           25%, 75% { opacity: 0; }
