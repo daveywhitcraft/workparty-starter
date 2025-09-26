@@ -63,7 +63,7 @@ export default async function ArchivePage() {
     .from("events")
     .select("id, slug, city, title, start_at")
     .in("id", eventIds)
-    .order("start_at", { ascending: true });
+    .order("start_at", { ascending: false });
 
   if (evErr) {
     return (
