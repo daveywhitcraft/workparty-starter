@@ -1,85 +1,105 @@
+// app/events/[slug]/screen/Player.tsx
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type Item = { id: string; title: string; src: string; order?: number };
-type Props = { playlist: Item[]; startIndex?: number; autoPlay?: boolean };
+export type PlaylistItem = {
+  id: string;
+  title: string;
+  bucket: string;
+  path: string;
+};
 
-export default function Player({ playlist, startIndex = 0, autoPlay = true }: Props) {
-  // sort by Admin order: 1 first, then 2, 3 ...
-  const ordered = useMemo(() => {
-    const arr = playlist.slice();
-    arr.sort((a, b) => {
-      const ai = a.order ?? Number.POSITIVE_INFINITY;
-      const bi = b.order ?? Number.POSITIVE_INFINITY;
-      if (ai !== bi) return ai - bi;
-      return String(a.id).localeCompare(String(b.id));
-    });
-    return arr;
-  }, [playlist]);
+type Props = {
+  items: PlaylistItem[];
+  startIndex?: number;
+  muted?: boolean;
+  loopAll?: boolean;
+  autoPlay?: boolean;
+};
 
-  const [idx, setIdx] = useState(startIndex);
+function buildPublicUrl(item: PlaylistItem) {
+  // Works when the bucket is public in Supabase
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  return `${base}/storage/v1/object/public/${item.bucket}/${item.path}`;
+}
+
+export default function Player({
+  items,
+  startIndex = 0,
+  muted = true,
+  loopAll = true,
+  autoPlay = true,
+}: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [idx, setIdx] = useState(() =>
+    Math.min(Math.max(startIndex, 0), Math.max(items.length - 1, 0))
+  );
 
-  // keep index valid if list length changes
+  const src = useMemo(() => {
+    if (items.length === 0) return "";
+    return buildPublicUrl(items[idx]);
+  }, [items, idx]);
+
+  // Advance on ended
   useEffect(() => {
-    if (idx >= ordered.length) setIdx(0);
-  }, [idx, ordered.length]);
+    const el = videoRef.current;
+    if (!el) return;
 
-  const handleEnded = () => {
-    // advance and loop
-    setIdx((n) => (n + 1) % ordered.length);
-  };
+    const onEnded = () => {
+      if (items.length === 0) return;
+      const next = idx + 1;
+      if (next < items.length) {
+        setIdx(next);
+      } else if (loopAll) {
+        setIdx(0);
+      }
+    };
 
-  // do not remount the <video>. swap its src and reload.
+    el.addEventListener("ended", onEnded);
+    return () => el.removeEventListener("ended", onEnded);
+  }, [idx, items.length, loopAll]);
+
+  // Autoplay current source when it changes
   useEffect(() => {
-    const vid = videoRef.current;
-    if (!vid) return;
-
-    const { src } = ordered[idx] || {};
-    if (!src) return;
-
-    if (vid.src !== src) {
-      vid.src = src;
+    const el = videoRef.current;
+    if (!el) return;
+    // Attempt autoplay after source swap
+    const play = async () => {
       try {
-        vid.load();
-      } catch {}
-    }
+        if (autoPlay) await el.play();
+      } catch {
+        // ignore autoplay rejections
+      }
+    };
+    play();
+  }, [src, autoPlay]);
 
-    if (autoPlay) {
-      vid.play().catch(() => {});
-    }
-  }, [idx, ordered, autoPlay]);
-
-  const current = ordered[idx];
+  if (items.length === 0) {
+    return (
+      <div style={{ padding: 24 }}>
+        <p>No videos to play.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="fixed inset-0 bg-black flex items-center justify-center">
+    <div style={{ width: "100vw", height: "100vh", background: "black" }}>
       <video
         ref={videoRef}
-        className="w-full h-full"
-        autoPlay={autoPlay}
-        muted
-        controls
+        key={src} // force reload on source change
+        src={src}
+        controls={false}
+        muted={muted}
         playsInline
-        preload="metadata"
-        onEnded={handleEnded}
-      />
-      <div
+        autoPlay={autoPlay}
         style={{
-          position: "absolute",
-          left: 12,
-          bottom: 12,
-          color: "white",
-          fontSize: 12,
-          opacity: 0.8,
-          background: "rgba(0,0,0,0.4)",
-          padding: "4px 8px",
-          borderRadius: 6,
+          width: "100%",
+          height: "100%",
+          objectFit: "contain",
+          background: "black",
         }}
-      >
-        {current?.title} • {idx + 1}/{ordered.length}
-      </div>
+      />
     </div>
   );
 }
