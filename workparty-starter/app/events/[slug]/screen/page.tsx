@@ -29,7 +29,6 @@ type Submission = {
 
 type PageProps = { params: { slug: string } };
 
-// Utility to coerce a value to a finite number or Infinity
 function toOrderIndex(v: unknown): number {
   const n = typeof v === "string" ? Number(v) : (v as number | undefined);
   return Number.isFinite(n) ? (n as number) : Number.POSITIVE_INFINITY;
@@ -71,10 +70,11 @@ async function getEventSubmissions(eventId: number): Promise<Submission[]> {
       ].join(",")
     )
     .eq("event_id", eventId)
-    .order("created_at", { ascending: true }); // deterministic fallback
+    .order("created_at", { ascending: true });
 
   if (error || !data) return [];
-  return data as Submission[];
+  // Cast through unknown to satisfy TS, since Supabase types are generic here
+  return data as unknown as Submission[];
 }
 
 export default async function ScreenPage({ params }: PageProps) {
@@ -83,7 +83,6 @@ export default async function ScreenPage({ params }: PageProps) {
 
   const subs = await getEventSubmissions(event.id);
 
-  // Only approved submissions with an actual stored file
   const playable = subs.filter(
     (s) =>
       s.status === "approved" &&
@@ -92,31 +91,23 @@ export default async function ScreenPage({ params }: PageProps) {
       guessType(s.file_path!) === "video"
   );
 
-  // Force Admin order: 1, 2, 3 … then fall back to created_at, then id
-  const playableSorted = playable
-    .slice()
-    .sort((a, b) => {
-      const ai = toOrderIndex(a.meta?.order_index ?? null);
-      const bi = toOrderIndex(b.meta?.order_index ?? null);
-      if (ai !== bi) return ai - bi;
-      // fallback by created_at ascending
-      const at = new Date(a.created_at).getTime();
-      const bt = new Date(b.created_at).getTime();
-      if (at !== bt) return at - bt;
-      // final stable tie-break
-      return a.id.localeCompare(b.id);
-    });
+  const playableSorted = playable.slice().sort((a, b) => {
+    const ai = toOrderIndex(a.meta?.order_index ?? null);
+    const bi = toOrderIndex(b.meta?.order_index ?? null);
+    if (ai !== bi) return ai - bi;
+    const at = new Date(a.created_at).getTime();
+    const bt = new Date(b.created_at).getTime();
+    if (at !== bt) return at - bt;
+    return a.id.localeCompare(b.id);
+  });
 
-  // Shape items for the Player component
   const items = playableSorted.map((s, idx) => ({
     id: s.id,
     title: s.title ?? `#${idx + 1}`,
     bucket: s.storage_bucket!,
     path: s.file_path!,
-    // Keep anything else your Player expects here
   }));
 
-  // Basic guard if no items
   if (items.length === 0) {
     return (
       <section style={{ padding: 24 }}>
@@ -130,7 +121,6 @@ export default async function ScreenPage({ params }: PageProps) {
 
   return (
     <section style={{ padding: 0 }}>
-      {/* Title bar or overlay optional; removed counters/overlays per your feedback */}
       <Player items={items} />
     </section>
   );
