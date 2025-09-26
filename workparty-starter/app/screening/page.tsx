@@ -2,7 +2,7 @@ import { supabaseService } from '@/lib/supabaseServer';
 
 async function getRows() {
   const admin = supabaseService();
-  const { data } = await admin.from('submissions').select('*').eq('status','approved').order('order_index', { ascending: true }).order('created_at', { ascending: true });
+  const { data } = await admin.from('submissions').select('*').eq('status','approved').order('order_index', { ascending: false }).order('created_at', { ascending: true });
   return data || [];
 }
 
