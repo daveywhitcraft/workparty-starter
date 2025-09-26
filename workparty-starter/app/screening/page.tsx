@@ -23,14 +23,15 @@ async function getEventSubmissions(eventId: number) {
   const rows = (data || []).slice();
 
   // Ascending numeric order by your Admin number, then created_at
-  rows.sort((a: any, b: any) => {
-    const ai = a.order_index == null || a.order_index === '' ? Number.POSITIVE_INFINITY : Number(a.order_index);
-    const bi = b.order_index == null || b.order_index === '' ? Number.POSITIVE_INFINITY : Number(b.order_index);
-    if (ai !== bi) return bi - ai;
-    const ta = a.created_at ? Date.parse(a.created_at) : 0;
-    const tb = b.created_at ? Date.parse(b.created_at) : 0;
-    return ta - tb;
-  });
+rows.sort((a: any, b: any) => {
+  const ai = a.order_index ?? Number.POSITIVE_INFINITY;
+  const bi = b.order_index ?? Number.POSITIVE_INFINITY;
+  if (ai !== bi) return bi - ai;   // descending
+  const ta = a.created_at ? Date.parse(a.created_at) : 0;
+  const tb = b.created_at ? Date.parse(b.created_at) : 0;
+  return tb - ta;
+});
+
 
   return rows;
 }
