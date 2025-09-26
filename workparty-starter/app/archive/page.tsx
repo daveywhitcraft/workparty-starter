@@ -111,7 +111,7 @@ export default async function ArchivePage() {
     if (!eventsById.has(eventId)) {
       sections.push({ key: `ev-${eventId}`, header: `Event #${eventId}`, items });
     }
-  }
+  
 
   if (sections.length === 0) {
     return (
