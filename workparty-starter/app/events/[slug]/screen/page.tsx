@@ -1,20 +1,10 @@
 // app/events/[slug]/screen/page.tsx
 export const runtime = "nodejs";
+export const revalidate = 0;
 
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
-import { createClient } from "@supabase/supabase-js";
+import { notFound } from "next/navigation";
+import { supabaseService } from "@/lib/supabaseServer";
 import Player from "./Player";
-
-type Submission = {
-  id: string;
-  created_at: string;
-  title?: string | null;
-  file_path?: string | null;
-  status?: string | null;
-  event_id?: number | null;
-  order_index?: number | null;
-};
 
 type EventRow = {
   id: number;
@@ -24,231 +14,124 @@ type EventRow = {
   start_at: string | null; // ISO
 };
 
+type Submission = {
+  id: string;
+  created_at: string;
+  title?: string | null;
+  file_path?: string | null;
+  storage_bucket?: string | null;
+  status?: string | null;
+  event_id?: number | null;
+  meta?: {
+    order_index?: number | string | null;
+  } | null;
+};
+
 type PageProps = { params: { slug: string } };
+
+// Utility to coerce a value to a finite number or Infinity
+function toOrderIndex(v: unknown): number {
+  const n = typeof v === "string" ? Number(v) : (v as number | undefined);
+  return Number.isFinite(n) ? (n as number) : Number.POSITIVE_INFINITY;
+}
 
 function guessType(path: string) {
   const i = path.lastIndexOf(".");
   const ext = i >= 0 ? path.slice(i + 1).toLowerCase() : "";
-  return ["mp4", "m4v", "mov", "webm", "mkv", "avi"].includes(ext) ? "video" : "file";
+  return ["mp4", "m4v", "webm", "mov"].includes(ext) ? "video" : "unknown";
+}
+
+async function getEventBySlug(slug: string): Promise<EventRow | null> {
+  const db = supabaseService();
+  const { data, error } = await db
+    .from("events")
+    .select("id, slug, title, city, start_at")
+    .eq("slug", slug)
+    .limit(1)
+    .maybeSingle<EventRow>();
+
+  if (error) return null;
+  return data ?? null;
+}
+
+async function getEventSubmissions(eventId: number): Promise<Submission[]> {
+  const db = supabaseService();
+  const { data, error } = await db
+    .from("submissions")
+    .select(
+      [
+        "id",
+        "created_at",
+        "title",
+        "status",
+        "event_id",
+        "storage_bucket",
+        "file_path",
+        "meta",
+      ].join(",")
+    )
+    .eq("event_id", eventId)
+    .order("created_at", { ascending: true }); // deterministic fallback
+
+  if (error || !data) return [];
+  return data as Submission[];
 }
 
 export default async function ScreenPage({ params }: PageProps) {
-  const authed = cookies().get("wp_admin_auth")?.value === "1";
+  const event = await getEventBySlug(params.slug);
+  if (!event) return notFound();
 
-  // server actions
-  async function login(formData: FormData) {
-    "use server";
-    const pwd = String(formData.get("password") || "");
-    if (pwd === process.env.ADMIN_PASS) {
-      cookies().set("wp_admin_auth", "1", {
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-        path: "/",
-        maxAge: 60 * 60 * 24 * 7,
-      });
-    }
-    redirect(`/events/${encodeURIComponent(params.slug)}/screen`);
-  }
-  async function logout() {
-    "use server";
-    cookies().delete("wp_admin_auth");
-    redirect(`/events/${encodeURIComponent(params.slug)}/screen`);
-  }
+  const subs = await getEventSubmissions(event.id);
 
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-  const srv = process.env.SUPABASE_SERVICE_ROLE || "";
-  const sb = createClient(url, srv, { auth: { persistSession: false } });
-
-  // robust slug lookup
-  const rawSlug = decodeURIComponent(params.slug);
-  const normalized = rawSlug.trim().toLowerCase().replace(/\s+/g, "-").replace(/-+/g, "-");
-
-  let { data: evData } = await sb
-    .from("events")
-    .select("id, slug, title, city, start_at")
-    .eq("slug", rawSlug)
-    .maybeSingle<EventRow>();
-
-  if (!evData) {
-    const { data } = await sb
-      .from("events")
-      .select("id, slug, title, city, start_at")
-      .eq("slug", normalized)
-      .maybeSingle<EventRow>();
-    evData = data || null;
-  }
-
-  if (!evData) {
-    const { data } = await sb
-      .from("events")
-      .select("id, slug, title, city, start_at")
-      .ilike("slug", `${normalized}%`)
-      .order("start_at", { ascending: false })
-      .limit(1);
-    evData = (data && data[0]) || null;
-  }
-
-  if (!evData) {
-    return (
-      <div style={{ padding: 24, color: "white", background: "black" }}>
-        <h1>Event not found</h1>
-        <p>Slug requested: <strong>{rawSlug}</strong></p>
-      </div>
-    );
-  }
-
-  // lock for non-admins
-  if (!authed) {
-    return (
-      <div style={{ padding: 24, maxWidth: 520, color: "white", background: "black" }}>
-        <h1 style={{ margin: 0 }}>Screening Locked</h1>
-        <p style={{ marginTop: 8 }}>Only admins may unlock with the password.</p>
-        <form action={login} style={{ display: "flex", gap: 8, marginTop: 12 }}>
-          <input name="password" type="password" placeholder="Admin password" style={{ padding: 10, flex: 1 }} required />
-          <button type="submit" style={{ padding: "10px 12px" }}>Unlock</button>
-        </form>
-      </div>
-    );
-  }
-
-  // fetch approved submissions with Admin order number
-  const { data: subs, error: subErr } = await sb
-    .from("submissions")
-    .select("id, title, file_path, status, created_at, order_index")
-    .eq("event_id", evData.id)
-    .eq("status", "approved");
-
-  if (subErr) {
-    return (
-      <div style={{ padding: 24, color: "white", background: "black" }}>
-        Error loading submissions: {subErr.message}
-      </div>
-    );
-  }
-
-  const rows = (subs || []) as Submission[];
-  if (rows.length === 0) {
-    return (
-      <div style={{ padding: 24, color: "white", background: "black" }}>
-        No approved videos for this event yet.
-      </div>
-    );
-  }
-
-  // signed URLs and playlist build
-  const { data: bucketList } = await sb.storage.listBuckets();
-  const bucketNames = new Set((bucketList || []).map((b) => b.name));
-  const defaultBucket =
-    (bucketNames.has("submissions") ? "submissions" : bucketList?.[0]?.name) || "";
-
-  const playlistRaw = await Promise.all(
-    rows.map(async (s) => {
-      let bucket = defaultBucket;
-
-      let fileUrl: string | null = null;
-      let reason: string | null = null;
-      let key = s.file_path || "";
-
-      if (!key) {
-        reason = "missing file_path";
-      } else if (!bucket) {
-        reason = "no bucket available";
-      } else {
-        const pref = `${bucket}/`;
-        if (key.startsWith(pref)) key = key.slice(pref.length);
-        key = key.replace(/^\/+/, "");
-
-        const { data: signed, error } = await sb.storage.from(bucket).createSignedUrl(key, 60 * 60 * 12);
-        if (error) {
-          reason = `sign error: ${error.message}`;
-        } else {
-          fileUrl = signed?.signedUrl || null;
-          if (!fileUrl) reason = "no signed url";
-        }
-      }
-
-      const type = s.file_path ? guessType(s.file_path) : "file";
-      if (type !== "video" && !reason) reason = `type ${type}`;
-
-      return {
-        id: s.id,
-        title: s.title || s.file_path || s.id,
-        src: fileUrl,
-        type,
-        reason,
-        meta: {
-          status: s.status,
-          bucket,
-          file_path: s.file_path || "",
-          key,
-          order_index: s.order_index ?? null, // carry Admin number
-        },
-      };
-    })
+  // Only approved submissions with an actual stored file
+  const playable = subs.filter(
+    (s) =>
+      s.status === "approved" &&
+      !!s.storage_bucket &&
+      !!s.file_path &&
+      guessType(s.file_path!) === "video"
   );
 
-// force Admin order 1, 2, 3 …
-const playableSorted = playable.slice().sort((a, b) => {
-  const ai = Number(a.meta.order_index ?? Number.POSITIVE_INFINITY);
-  const bi = Number(b.meta.order_index ?? Number.POSITIVE_INFINITY);
-  if (ai !== bi) return ai - bi;
-  return String(a.id).localeCompare(String(b.id));
-});
+  // Force Admin order: 1, 2, 3 … then fall back to created_at, then id
+  const playableSorted = playable
+    .slice()
+    .sort((a, b) => {
+      const ai = toOrderIndex(a.meta?.order_index ?? null);
+      const bi = toOrderIndex(b.meta?.order_index ?? null);
+      if (ai !== bi) return ai - bi;
+      // fallback by created_at ascending
+      const at = new Date(a.created_at).getTime();
+      const bt = new Date(b.created_at).getTime();
+      if (at !== bt) return at - bt;
+      // final stable tie-break
+      return a.id.localeCompare(b.id);
+    });
 
+  // Shape items for the Player component
+  const items = playableSorted.map((s, idx) => ({
+    id: s.id,
+    title: s.title ?? `#${idx + 1}`,
+    bucket: s.storage_bucket!,
+    path: s.file_path!,
+    // Keep anything else your Player expects here
+  }));
 
-  const skipped = playlistRaw.filter(p => !p.src || p.type !== "video");
-
-  if (playableSorted.length === 0) {
+  // Basic guard if no items
+  if (items.length === 0) {
     return (
-      <div style={{ padding: 24, color: "white", background: "black" }}>
-        No playable videos found for this event.
-      </div>
+      <section style={{ padding: 24 }}>
+        <div style={{ maxWidth: 800 }}>
+          <h1 style={{ margin: 0 }}>{event.title ?? "Screening"}</h1>
+          <p style={{ marginTop: 12 }}>No approved videos for this event.</p>
+        </div>
+      </section>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black">
-      {authed && (
-        <div style={{ position: "fixed", top: 8, right: 8, zIndex: 10, display: "flex", gap: 8 }}>
-          <form action={logout}>
-            <button type="submit" style={{ fontSize: 12, padding: "6px 10px" }}>
-              Log out
-            </button>
-          </form>
-
-          {skipped.length > 0 && (
-            <details style={{ fontSize: 12 }}>
-              <summary style={{ cursor: "pointer" }}>
-                Skipped {skipped.length} / {playlistRaw.length}
-              </summary>
-              <div style={{ maxWidth: 420, maxHeight: 240, overflow: "auto", padding: 8, background: "#111", border: "1px solid #333", borderRadius: 6 }}>
-                <ul style={{ margin: 0, paddingLeft: 16 }}>
-                  {skipped.map(s => (
-                    <li key={s.id} style={{ marginBottom: 6 }}>
-                      <div style={{ fontWeight: 600 }}>{s.title}</div>
-                      <div>Status: {s.meta.status || "?"}</div>
-                      <div>Reason: {s.reason || "unknown"}</div>
-                      <div>Bucket: {s.meta.bucket || "?"}</div>
-                      <div>Path: {s.meta.file_path}</div>
-                      <div>Order: {String(s.meta.order_index ?? "")}</div>
-                      <div>Key used: {s.meta.key}</div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </details>
-          )}
-        </div>
-      )}
-
-      <Player
-        playlist={playableSorted.map(p => ({
-          id: p.id,
-          title: `#${String(p.meta.order_index ?? "")} ${p.title}`,
-          src: p.src as string,
-        }))}
-      />
-    </div>
+    <section style={{ padding: 0 }}>
+      {/* Title bar or overlay optional; removed counters/overlays per your feedback */}
+      <Player items={items} />
+    </section>
   );
 }
