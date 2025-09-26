@@ -110,7 +110,6 @@ export default async function ArchivePage() {
   for (const [eventId, items] of byEvent) {
     if (!eventsById.has(eventId)) {
       sections.push({ key: `ev-${eventId}`, header: `Event #${eventId}`, items });
-    }
   
 
   if (sections.length === 0) {
@@ -120,7 +119,7 @@ export default async function ArchivePage() {
         <p style={{ marginTop: 12 }}>No approved, assigned items yet.</p>
       </section>
     );
-  }
+  
 
   return (
     <section style={{ padding: "2rem", maxWidth: 900 }}>
