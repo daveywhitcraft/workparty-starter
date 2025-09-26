@@ -27,7 +27,6 @@ type EventRow = {
 };
 
 export default async function ArchivePage() {
-  // Server-side Supabase with service role
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const srv = process.env.SUPABASE_SERVICE_ROLE || "";
   const sb = createClient(url, srv, { auth: { persistSession: false } });
@@ -37,8 +36,7 @@ export default async function ArchivePage() {
     .from("submissions")
     .select("*")
     .eq("status", "approved")
-    .not("event_id", "is", null)
-    .order("created_at", { ascending: false });
+    .not("event_id", "is", null);
 
   if (subErr) {
     return (
@@ -59,13 +57,13 @@ export default async function ArchivePage() {
     );
   }
 
-  // 2) Load only referenced events
+  // 2) Load referenced events
   const eventIds = Array.from(new Set(rows.map((r) => r.event_id)));
   const { data: evs, error: evErr } = await sb
     .from("events")
     .select("id, slug, city, title, start_at")
     .in("id", eventIds)
-    .order("start_at", { ascending: true }); // keep your existing behavior
+    .order("start_at", { ascending: true });
 
   if (evErr) {
     return (
@@ -79,13 +77,14 @@ export default async function ArchivePage() {
   const events: EventRow[] = evs || [];
   const eventsById = new Map(events.map((e) => [e.id, e]));
 
-  // 3) Group by event and sort inside each group by admin order (sort_index)
+  // 3) Group by event and sort inside each group by sort_index
   const byEvent = new Map<number, Submission[]>();
   for (const s of rows) {
     const list = byEvent.get(s.event_id) || [];
     list.push(s);
     byEvent.set(s.event_id, list);
   }
+
   for (const list of byEvent.values()) {
     list.sort((a, b) => {
       const ai = a.sort_index ?? Number.MAX_SAFE_INTEGER;
@@ -94,7 +93,7 @@ export default async function ArchivePage() {
     });
   }
 
-  // 4) Build sections using events order; include unknown event ids as fallback
+  // 4) Build sections in event order
   const sections =
     events
       .map((ev) => {
