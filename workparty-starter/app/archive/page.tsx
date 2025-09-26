@@ -84,11 +84,10 @@ export default async function ArchivePage() {
     list.push(s);
     byEvent.set(s.event_id, list);
   }
-   for (const list of byEvent.values()) {
-    list.sort((a, b) => {
-      return (a.sort_index ?? 0) - (b.sort_index ?? 0);
-    });
-  }
+  for (const list of byEvent.values()) {
+  list.sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0));
+}
+
 
   }
 
