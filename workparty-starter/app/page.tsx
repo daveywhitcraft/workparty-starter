@@ -31,14 +31,14 @@ export default function Page() {
 
           <div
             style={{
-              fontSize: "clamp(28px, 6.5vw, 110px)",
+              fontSize: "clamp(20px, 6.5vw, 110px)",
               marginTop: "2rem",
               lineHeight: 1.15,
             }}
           >
             28/09/2025&nbsp;&nbsp;20:00-? <br />
             Schererstraße 10, 13347 Wedding Berlin <br />
-            submissions closed thanks to all who submitted!
+            submissions closed
           </div>
  {/*
           <a
