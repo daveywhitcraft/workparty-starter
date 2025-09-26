@@ -25,7 +25,7 @@ function buildUrl(path: string) {
 export default function Player({
   items,
   startIndex = 0,
-  muted = true,
+  muted = false,
   loopAll = true,
   autoPlay = true,
 }: Props) {
@@ -93,7 +93,7 @@ export default function Player({
         ref={videoRef}
         key={src}
         src={src}
-        controls={false}
+        controls={true}
         muted={muted}
         playsInline
         autoPlay={autoPlay}
