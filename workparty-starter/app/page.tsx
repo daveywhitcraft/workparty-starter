@@ -51,9 +51,10 @@ export default function Page() {
           >
             SUBMIT NOW
           </a>
+          */}
         </div>
       </div>
-*/}
+
       {/* Blinking Floating Button */}
      {/*  <a
         href="/submit"
