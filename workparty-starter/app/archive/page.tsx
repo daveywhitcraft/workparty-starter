@@ -1,3 +1,4 @@
+// app/archive/page.tsx
 export const runtime = "nodejs";
 export const revalidate = 0;
 
@@ -13,7 +14,8 @@ type Submission = {
   submitter_name: string | null;
   year: number | string | null;
   city: string | null;
-  event_id: number; // non-null because we filter for assigned
+  event_id: number;
+  sort_index?: number | null; // admin order
 };
 
 type EventRow = {
@@ -25,12 +27,12 @@ type EventRow = {
 };
 
 export default async function ArchivePage() {
-  // Use service role on the server so reads are reliable
+  // Server-side Supabase with service role
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
   const srv = process.env.SUPABASE_SERVICE_ROLE || "";
   const sb = createClient(url, srv, { auth: { persistSession: false } });
 
-  // 1) Approved + assigned only; newest → oldest
+  // 1) Approved + assigned only
   const { data: subs, error: subErr } = await sb
     .from("submissions")
     .select("*")
@@ -57,13 +59,13 @@ export default async function ArchivePage() {
     );
   }
 
-  // 2) Load only referenced events; newest events first
+  // 2) Load only referenced events
   const eventIds = Array.from(new Set(rows.map((r) => r.event_id)));
   const { data: evs, error: evErr } = await sb
     .from("events")
     .select("id, slug, city, title, start_at")
     .in("id", eventIds)
-    .order("start_at", { ascending: true });
+    .order("start_at", { ascending: true }); // keep your existing behavior
 
   if (evErr) {
     return (
@@ -77,7 +79,7 @@ export default async function ArchivePage() {
   const events: EventRow[] = evs || [];
   const eventsById = new Map(events.map((e) => [e.id, e]));
 
-  // 3) Group submissions by event_id (items newest → oldest inside each group)
+  // 3) Group by event and sort inside each group by admin order (sort_index)
   const byEvent = new Map<number, Submission[]>();
   for (const s of rows) {
     const list = byEvent.get(s.event_id) || [];
@@ -85,13 +87,14 @@ export default async function ArchivePage() {
     byEvent.set(s.event_id, list);
   }
   for (const list of byEvent.values()) {
-  list.sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0));
-}
-
-
+    list.sort((a, b) => {
+      const ai = a.sort_index ?? Number.MAX_SAFE_INTEGER;
+      const bi = b.sort_index ?? Number.MAX_SAFE_INTEGER;
+      return ai - bi;
+    });
   }
 
-  // 4) Build sections using events order; include any unknown event_id as fallback
+  // 4) Build sections using events order; include unknown event ids as fallback
   const sections =
     events
       .map((ev) => {
@@ -110,7 +113,8 @@ export default async function ArchivePage() {
   for (const [eventId, items] of byEvent) {
     if (!eventsById.has(eventId)) {
       sections.push({ key: `ev-${eventId}`, header: `Event #${eventId}`, items });
-  
+    }
+  }
 
   if (sections.length === 0) {
     return (
@@ -119,7 +123,7 @@ export default async function ArchivePage() {
         <p style={{ marginTop: 12 }}>No approved, assigned items yet.</p>
       </section>
     );
-  
+  }
 
   return (
     <section style={{ padding: "2rem", maxWidth: 900 }}>
