@@ -26,10 +26,10 @@ async function getEventSubmissions(eventId: number) {
 rows.sort((a: any, b: any) => {
   const ai = a.order_index ?? Number.POSITIVE_INFINITY;
   const bi = b.order_index ?? Number.POSITIVE_INFINITY;
-  if (ai !== bi) return bi - ai;   // descending
+  if (ai !== bi) return ai - bi;   // descending
   const ta = a.created_at ? Date.parse(a.created_at) : 0;
   const tb = b.created_at ? Date.parse(b.created_at) : 0;
-  return tb - ta;
+  return ta - tb;
 });
 
 
