@@ -37,7 +37,7 @@ export default function Page() {
             }}
           >
             28/09/2025&nbsp;&nbsp;20:00-? <br />
-            Schererstraße 10, 13347 Wedding Berlin
+            Schererstraße 10, 13347 Wedding Berlin <br />
             submissions closed thanks to all who submitted!
           </div>
  {/*
