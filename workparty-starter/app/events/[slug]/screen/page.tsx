@@ -112,14 +112,15 @@ export default async function ScreenPage({ params }: PageProps) {
   }
 
   // Fetch approved submissions in Admin play order: 1, 2, 3, ...
-  const { data: subs, error: subErr } = await sb
-    .from("submissions")
-    .select("id, title, file_path, status, created_at, order_index") // added order_index
-    .eq("event_id", evData.id)
-    .eq("status", "approved")
-    .order("order_index", { ascending: true, nullsFirst: false })   // key line
-    .order("created_at", { ascending: true })
-    .order("id", { ascending: true });
+const { data: subs, error: subErr } = await sb
+  .from("submissions")
+  .select("id, title, file_path, status, created_at, order_index")
+  .eq("event_id", evData.id)
+  .eq("status", "approved")
+  .order("order_index", { ascending: true, nullsFirst: false })
+  .order("created_at", { ascending: true })
+  .order("id", { ascending: true });
+
 
   if (subErr) {
     return (
