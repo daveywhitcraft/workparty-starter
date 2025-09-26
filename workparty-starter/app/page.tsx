@@ -75,7 +75,7 @@ export default function Page() {
       >
         SUBMIT NOW
       </a>
-*/}
+
       {/* styled-jsx needs a Client Component; this is marked with "use client" */}
       <style jsx global>{`
         @keyframes wp-blink {
@@ -84,6 +84,7 @@ export default function Page() {
         }
         .wp-blink-btn { animation: wp-blink 5s infinite; }
       `}</style>
+   */}
     </>
   );
 }
