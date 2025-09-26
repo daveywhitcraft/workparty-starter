@@ -39,7 +39,7 @@ export default function Page() {
             28/09/2025&nbsp;&nbsp;20:00-? <br />
             Schererstraße 10, 13347 Wedding Berlin
           </div>
-
+ {/*
           <a
             href="/submit"
             style={{
@@ -53,9 +53,9 @@ export default function Page() {
           </a>
         </div>
       </div>
-
+*/}
       {/* Blinking Floating Button */}
-      <a
+     {/*  <a
         href="/submit"
         className="wp-blink-btn"
         style={{
@@ -74,7 +74,7 @@ export default function Page() {
       >
         SUBMIT NOW
       </a>
-
+*/}
       {/* styled-jsx needs a Client Component; this is marked with "use client" */}
       <style jsx global>{`
         @keyframes wp-blink {
