@@ -14,26 +14,19 @@ async function getCurrentEvent() {
 
 async function getEventSubmissions(eventId: number) {
   const db = supabaseService();
-  const { data } = await db
+  const { data, error } = await db
     .from('submissions')
-    .select('*')
+    .select('id, title, artist_name, file_path, status, event_id, order_index, created_at')
     .eq('status', 'approved')
-    .eq('event_id', eventId);
+    .eq('event_id', eventId)
+    // Admin numbers: 1 plays first, then 2, 3, ...
+    .order('order_index', { ascending: true, nullsFirst: false })
+    // tie breakers
+    .order('created_at', { ascending: true })
+    .order('id', { ascending: true });
 
-  const rows = (data || []).slice();
-
-  // Ascending numeric order by your Admin number, then created_at
-rows.sort((a: any, b: any) => {
-  const ai = a.order_index ?? Number.POSITIVE_INFINITY;
-  const bi = b.order_index ?? Number.POSITIVE_INFINITY;
-  if (ai !== bi) return ai - bi;   // ascending
-  const ta = a.created_at ? Date.parse(a.created_at) : 0;
-  const tb = b.created_at ? Date.parse(b.created_at) : 0;
-  return ta - tb;
-});
-
-
-  return rows;
+  if (error) throw error;
+  return data ?? [];
 }
 
 export default async function ScreeningPage() {
@@ -52,9 +45,8 @@ export default async function ScreeningPage() {
   return (
     <section>
       <h1 className="title">Current Screening</h1>
-      <p className="muted">Playlist order follows the numbers set in Admin.</p>
+      <p className="muted">Playlist follows the numbers set in Admin.</p>
 
-      {/* Force a simple top-to-bottom column so #1 appears first */}
       <div className="grid" style={{ display: 'flex', flexDirection: 'column' }}>
         {rows.map((r: any) => (
           <div className="card" key={r.id}>
