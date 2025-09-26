@@ -3,8 +3,7 @@ export default function AboutPage() {
     <section style={{ padding: "24px" }}>
       <div style={{ maxWidth: "70ch" }}>
         <p style={{ margin: 0, lineHeight: 1.5 }}>
-          WORK.PARTY is an itinerant project of collective screening events<br />
-           We gather and screen SHORT (<10 mins) videos from LOCAL artists and all gather to watch and chat and have fun. Please consider submitting if you can join <br />
+          WORK.PARTY is a roving screening series where we get together to share and watch short videos (under 10 minutes) from artists based in Berlin. The idea is to keep it local and in-person, so if you’re here and can join us, we’d love for you to submit!<br />
           Check our <a href="https://www.instagram.com/workparty.video/">Instagram</a> for current events.<br />
         
 
