@@ -5,17 +5,17 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { supabaseService } from '@/lib/supabaseServer';
 
-type EventRow = { id: number; title: string | null; slug: string };
+type EventRow = { id: number; title: string | null; slug: string; start_at?: string | null };
 
 export default async function AdminPage({
   searchParams,
 }: {
   searchParams?: { err?: string };
 }) {
-  // ---- auth check (same cookie) ----
+  // auth check
   const authed = cookies().get('wp_admin_auth')?.value === '1';
 
-  // ---- server actions: login / logout ----
+  // server actions: login / logout
   async function login(formData: FormData) {
     'use server';
     const pass = String(formData.get('password') || '');
@@ -24,7 +24,7 @@ export default async function AdminPage({
       process.env.ADMIN_PASSWORD ||
       '';
 
-    // If no password is configured yet, keep you in.
+    // If no password is configured yet, keep you in
     if (!expected) {
       cookies().set('wp_admin_auth', '1', {
         path: '/',
@@ -88,25 +88,27 @@ export default async function AdminPage({
     );
   }
 
-  // ---- data ----
+  // data
   const db = supabaseService();
 
+  // Events: newest first by start_at, then id
   const { data: eventsRaw } = await db
     .from('events')
-    .select('id, title, slug')
+    .select('id, title, slug, start_at')
+    .order('start_at', { ascending: false })
     .order('id', { ascending: false })
     .returns<EventRow[]>();
   const events: EventRow[] = eventsRaw ?? [];
 
-  // select('*') so missing columns don't break rendering
+  // Submissions: newest first by created_at
   const { data: submissionsRaw } = await db
     .from('submissions')
     .select('*')
-.order('order_index', { ascending: true, nullsFirst: false })
-.order('created_at', { ascending: true });
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false });
   const submissions: any[] = submissionsRaw ?? [];
 
-  // ---- per-row actions ----
+  // per-row actions
   async function setStatus(formData: FormData) {
     'use server';
     const id = String(formData.get('id') || '');
@@ -136,7 +138,7 @@ export default async function AdminPage({
     redirect('/admin');
   }
 
-  // ---- NEW: create event from Title only ----
+  // create event from Title only
   async function createEvent(formData: FormData) {
     'use server';
     const title = String(formData.get('title') || '').trim();
@@ -161,7 +163,7 @@ export default async function AdminPage({
     let i = 2;
     while (taken.has(slug)) slug = `${base}-${i++}`;
 
-    const start_at = new Date().toISOString(); // now
+    const start_at = new Date().toISOString();
     const city = '';
 
     const { data, error } = await svc
@@ -237,13 +239,9 @@ export default async function AdminPage({
                 <th className="text-left px-3 py-2">Title</th>
                 <th className="text-left px-3 py-2">Artist</th>
                 <th className="text-left px-3 py-2">City</th>
-
-                {/* NEW: Email header if present */}
                 {submissions.some(r => has(r, 'email')) && (
                   <th className="text-left px-3 py-2">Email</th>
                 )}
-
-                {/* optional columns */}
                 {submissions.some(r => has(r, 'year')) && <th className="text-left px-3 py-2">Year</th>}
                 {submissions.some(r => has(r, 'runtime') || has(r, 'runtime_mmss')) && (
                   <th className="text-left px-3 py-2">Runtime</th>
@@ -275,7 +273,6 @@ export default async function AdminPage({
                     <td className="px-3 py-2">{row.artist_name ?? ''}</td>
                     <td className="px-3 py-2">{row.city ?? ''}</td>
 
-                    {/* NEW: Email cell if present */}
                     {has(row, 'email') && (
                       <td className="px-3 py-2">
                         {row.email ?? ''}
@@ -287,7 +284,6 @@ export default async function AdminPage({
                       <td className="px-3 py-2">{runtimeLabel}</td>
                     )}
 
-                    {/* Status */}
                     {has(row, 'status') ? (
                       <td className="px-3 py-2">
                         <form action={setStatus} className="flex items-center gap-2">
@@ -310,7 +306,6 @@ export default async function AdminPage({
                       <td className="px-3 py-2"></td>
                     )}
 
-                    {/* Event */}
                     {has(row, 'event_id') ? (
                       <td className="px-3 py-2">
                         <form action={setEvent} className="flex items-center gap-2">
@@ -336,7 +331,6 @@ export default async function AdminPage({
                       <td className="px-3 py-2"></td>
                     )}
 
-                    {/* Order */}
                     {has(row, 'order_index') ? (
                       <td className="px-3 py-2">
                         <form action={setOrderIndex} className="flex items-center gap-2">
@@ -358,7 +352,6 @@ export default async function AdminPage({
                       <td className="px-3 py-2"></td>
                     )}
 
-                    {/* File link */}
                     {submissions.some(r => has(r, 'file_path')) ? (
                       <td className="px-3 py-2">
                         {fileUrl(row) ? (
@@ -369,7 +362,6 @@ export default async function AdminPage({
                       </td>
                     ) : null}
 
-                    {/* Quick actions */}
                     <td className="px-3 py-2">
                       {has(row, 'status') ? (
                         <div className="flex gap-2">
@@ -425,3 +417,4 @@ export default async function AdminPage({
     </main>
   );
 }
+
