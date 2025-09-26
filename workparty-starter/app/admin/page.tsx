@@ -102,7 +102,8 @@ export default async function AdminPage({
   const { data: submissionsRaw } = await db
     .from('submissions')
     .select('*')
-    .order('created_at', { ascending: false });
+.order('order_index', { ascending: true, nullsFirst: false })
+.order('created_at', { ascending: true });
   const submissions: any[] = submissionsRaw ?? [];
 
   // ---- per-row actions ----
