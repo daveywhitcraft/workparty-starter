@@ -84,12 +84,12 @@ export default async function ArchivePage() {
     list.push(s);
     byEvent.set(s.event_id, list);
   }
-  for (const list of byEvent.values()) {
+   for (const list of byEvent.values()) {
     list.sort((a, b) => {
-      const ta = a.created_at ? Date.parse(a.created_at) : 0;
-      const tb = b.created_at ? Date.parse(b.created_at) : 0;
-      return tb - ta;
+      return (a.sort_index ?? 0) - (b.sort_index ?? 0);
     });
+  }
+
   }
 
   // 4) Build sections using events order; include any unknown event_id as fallback
