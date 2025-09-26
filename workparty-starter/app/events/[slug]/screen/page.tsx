@@ -1,3 +1,4 @@
+// app/events/[slug]/screen/page.tsx
 export const runtime = "nodejs";
 
 import { cookies } from "next/headers";
@@ -12,7 +13,7 @@ type Submission = {
   file_path?: string | null;
   status?: string | null;
   event_id?: number | null;
-  order_index?: number | null;   // added
+  order_index?: number | null;
 };
 
 type EventRow = {
@@ -59,7 +60,7 @@ export default async function ScreenPage({ params }: PageProps) {
   const srv = process.env.SUPABASE_SERVICE_ROLE || "";
   const sb = createClient(url, srv, { auth: { persistSession: false } });
 
-  // Robust slug lookup
+  // robust slug lookup
   const rawSlug = decodeURIComponent(params.slug);
   const normalized = rawSlug.trim().toLowerCase().replace(/\s+/g, "-").replace(/-+/g, "-");
 
@@ -97,7 +98,7 @@ export default async function ScreenPage({ params }: PageProps) {
     );
   }
 
-  // Lock for non-admins
+  // lock for non-admins
   if (!authed) {
     return (
       <div style={{ padding: 24, maxWidth: 520, color: "white", background: "black" }}>
@@ -111,16 +112,12 @@ export default async function ScreenPage({ params }: PageProps) {
     );
   }
 
-  // Fetch approved submissions in Admin play order: 1, 2, 3, ...
-const { data: subs, error: subErr } = await sb
-  .from("submissions")
-  .select("id, title, file_path, status, created_at, order_index")
-  .eq("event_id", evData.id)
-  .eq("status", "approved")
-  .order("order_index", { ascending: true, nullsFirst: false })
-  .order("created_at", { ascending: true })
-  .order("id", { ascending: true });
-
+  // fetch approved submissions with Admin order number
+  const { data: subs, error: subErr } = await sb
+    .from("submissions")
+    .select("id, title, file_path, status, created_at, order_index")
+    .eq("event_id", evData.id)
+    .eq("status", "approved");
 
   if (subErr) {
     return (
@@ -139,7 +136,7 @@ const { data: subs, error: subErr } = await sb
     );
   }
 
-  // Prepare signed URLs with bucket default and key normalization
+  // signed URLs and playlist build
   const { data: bucketList } = await sb.storage.listBuckets();
   const bucketNames = new Set((bucketList || []).map((b) => b.name));
   const defaultBucket =
@@ -180,16 +177,29 @@ const { data: subs, error: subErr } = await sb
         src: fileUrl,
         type,
         reason,
-        meta: { status: s.status, bucket, file_path: s.file_path || "", key, order_index: s.order_index ?? null },
+        meta: {
+          status: s.status,
+          bucket,
+          file_path: s.file_path || "",
+          key,
+          order_index: s.order_index ?? null, // carry Admin number
+        },
       };
     })
   );
 
-  // Keep original order from the query (already 1,2,3,...)
+  // keep only playable and force Admin order 1, 2, 3, …
   const playable = playlistRaw.filter(p => p.src && p.type === "video");
+  const playableSorted = playable.slice().sort((a, b) => {
+    const ai = a.meta.order_index ?? Number.POSITIVE_INFINITY;
+    const bi = b.meta.order_index ?? Number.POSITIVE_INFINITY;
+    if (ai !== bi) return ai - bi; // 1 first
+    return String(a.id).localeCompare(String(b.id));
+  });
+
   const skipped = playlistRaw.filter(p => !p.src || p.type !== "video");
 
-  if (playable.length === 0) {
+  if (playableSorted.length === 0) {
     return (
       <div style={{ padding: 24, color: "white", background: "black" }}>
         No playable videos found for this event.
@@ -233,7 +243,11 @@ const { data: subs, error: subErr } = await sb
       )}
 
       <Player
-        playlist={playable.map(p => ({ id: p.id, title: p.title, src: p.src as string }))}
+        playlist={playableSorted.map(p => ({
+          id: p.id,
+          title: `#${String(p.meta.order_index ?? "")} ${p.title}`,
+          src: p.src as string,
+        }))}
       />
     </div>
   );
