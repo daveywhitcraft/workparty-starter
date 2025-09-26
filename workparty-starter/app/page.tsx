@@ -31,7 +31,7 @@ export default function Page() {
 
           <div
             style={{
-              fontSize: "clamp(20px)",
+              fontSize: "clamp(28px)",
               marginTop: "2rem",
               lineHeight: 1.15,
             }}
