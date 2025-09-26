@@ -188,14 +188,14 @@ export default async function ScreenPage({ params }: PageProps) {
     })
   );
 
-  // keep only playable and force Admin order 1, 2, 3, …
-  const playable = playlistRaw.filter(p => p.src && p.type === "video");
-  const playableSorted = playable.slice().sort((a, b) => {
-    const ai = a.meta.order_index ?? Number.POSITIVE_INFINITY;
-    const bi = b.meta.order_index ?? Number.POSITIVE_INFINITY;
-    if (ai !== bi) return ai - bi; // 1 first
-    return String(a.id).localeCompare(String(b.id));
-  });
+// force Admin order 1, 2, 3 …
+const playableSorted = playable.slice().sort((a, b) => {
+  const ai = Number(a.meta.order_index ?? Number.POSITIVE_INFINITY);
+  const bi = Number(b.meta.order_index ?? Number.POSITIVE_INFINITY);
+  if (ai !== bi) return ai - bi;
+  return String(a.id).localeCompare(String(b.id));
+});
+
 
   const skipped = playlistRaw.filter(p => !p.src || p.type !== "video");
 
