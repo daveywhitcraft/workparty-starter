@@ -19,10 +19,9 @@ type Submission = {
   created_at: string;
   title?: string | null;
   file_path?: string | null;
-  storage_bucket?: string | null;
   status?: string | null;
   event_id?: number | null;
-  meta?: { order_index?: number | string | null } | null;
+  order_index?: number | null; // NOTE: top-level order_index
 };
 
 type PageProps = { params: { slug: string } };
@@ -43,9 +42,10 @@ async function getEventSubmissions(eventId: number): Promise<Submission[]> {
   const { data, error } = await db
     .from("submissions")
     .select(
-      "id, created_at, title, status, event_id, storage_bucket, file_path, meta"
+      "id, created_at, title, status, event_id, file_path, order_index"
     )
     .eq("event_id", eventId)
+    .eq("status", "approved") // match Archive behavior
     .order("created_at", { ascending: true });
 
   if (error || !data) return [];
@@ -53,7 +53,10 @@ async function getEventSubmissions(eventId: number): Promise<Submission[]> {
 }
 
 function toOrderIndex(v: unknown): number {
-  const n = typeof v === "string" ? Number(v) : (v as number | undefined);
+  const n =
+    typeof v === "string" ? Number(v) :
+    typeof v === "number" ? v :
+    NaN;
   return Number.isFinite(n) ? (n as number) : Number.POSITIVE_INFINITY;
 }
 
@@ -63,13 +66,13 @@ export default async function ScreenPage({ params }: PageProps) {
 
   const subs = await getEventSubmissions(event.id);
 
-  // Minimal, safe filter: any row with a stored file plays
-  const playable = subs.filter((s) => s.storage_bucket && s.file_path);
+  // Require a file path (bucket is handled by /api/public-url in Player)
+  const playable = subs.filter((s) => !!s.file_path);
 
-  // Enforce Admin order_index: 1,2,3…; stable fallbacks keep previous behavior
-  const playableSorted = playable.slice().sort((a, b) => {
-    const ai = toOrderIndex(a.meta?.order_index ?? null);
-    const bi = toOrderIndex(b.meta?.order_index ?? null);
+  // Admin order 1,2,3 … then fallback
+  const ordered = playable.slice().sort((a, b) => {
+    const ai = toOrderIndex(a.order_index ?? null);
+    const bi = toOrderIndex(b.order_index ?? null);
     if (ai !== bi) return ai - bi;
     const at = new Date(a.created_at).getTime();
     const bt = new Date(b.created_at).getTime();
@@ -77,11 +80,10 @@ export default async function ScreenPage({ params }: PageProps) {
     return a.id.localeCompare(b.id);
   });
 
-  const items = playableSorted.map((s, idx) => ({
+  const items = ordered.map((s, i) => ({
     id: s.id,
-    title: s.title ?? `#${idx + 1}`,
-    bucket: s.storage_bucket!,
-    path: s.file_path!,
+    title: s.title ?? `#${i + 1}`,
+    path: s.file_path!, // Player builds URL via /api/public-url
   }));
 
   if (items.length === 0) {
