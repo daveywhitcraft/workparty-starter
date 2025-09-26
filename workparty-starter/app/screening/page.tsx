@@ -57,7 +57,7 @@ export default async function ScreeningPage() {
       <h1 className="title">Current Screening</h1>
       <p className="muted">Playlist order follows the numbers set in Admin.</p>
       <div className="grid">
-         {[...rows].reverse().map((r:any) => (
+        {rows.map((r:any) => (
           <div className="card" key={r.id}>
             <b>{r.title}</b> <span className="muted">· {r.artist_name}</span>
             <div className="muted" style={{ marginTop: 2, fontSize: 12 }}>
