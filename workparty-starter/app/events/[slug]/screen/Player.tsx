@@ -1,34 +1,44 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-type Item = { id: string; title: string; src: string };
+type Item = { id: string; title: string; src: string; order?: number };
 type Props = { playlist: Item[]; startIndex?: number; autoPlay?: boolean };
 
 export default function Player({ playlist, startIndex = 0, autoPlay = true }: Props) {
+  // sort by Admin order: 1 first, then 2, 3 ...
+  const ordered = useMemo(() => {
+    const arr = playlist.slice();
+    arr.sort((a, b) => {
+      const ai = a.order ?? Number.POSITIVE_INFINITY;
+      const bi = b.order ?? Number.POSITIVE_INFINITY;
+      if (ai !== bi) return ai - bi;
+      return String(a.id).localeCompare(String(b.id));
+    });
+    return arr;
+  }, [playlist]);
+
   const [idx, setIdx] = useState(startIndex);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Keep index valid if playlist changes
+  // keep index valid if list length changes
   useEffect(() => {
-    if (idx >= playlist.length) setIdx(0);
-  }, [idx, playlist.length]);
+    if (idx >= ordered.length) setIdx(0);
+  }, [idx, ordered.length]);
 
   const handleEnded = () => {
     // advance and loop
-    setIdx((n) => (n + 1) % playlist.length);
+    setIdx((n) => (n + 1) % ordered.length);
   };
 
-  // IMPORTANT: do NOT remount the <video>. Instead, swap its src and reload.
+  // do not remount the <video>. swap its src and reload.
   useEffect(() => {
     const vid = videoRef.current;
     if (!vid) return;
 
-    // Update the src directly to avoid React remounting the element
-    const { src } = playlist[idx] || {};
+    const { src } = ordered[idx] || {};
     if (!src) return;
 
-    // Only update/reload if the src actually changed
     if (vid.src !== src) {
       vid.src = src;
       try {
@@ -37,21 +47,17 @@ export default function Player({ playlist, startIndex = 0, autoPlay = true }: Pr
     }
 
     if (autoPlay) {
-      vid.play().catch(() => {
-        // Autoplay might be blocked until a user gesture; ignore.
-      });
+      vid.play().catch(() => {});
     }
-  }, [idx, playlist, autoPlay]);
+  }, [idx, ordered, autoPlay]);
 
-  const current = playlist[idx];
+  const current = ordered[idx];
 
   return (
     <div className="fixed inset-0 bg-black flex items-center justify-center">
-      {/* Single persistent video element – no key, no remount between items */}
       <video
         ref={videoRef}
         className="w-full h-full"
-        // Don't set src here; we set it imperatively so the element persists
         autoPlay={autoPlay}
         muted
         controls
@@ -72,7 +78,7 @@ export default function Player({ playlist, startIndex = 0, autoPlay = true }: Pr
           borderRadius: 6,
         }}
       >
-        {current?.title} • {idx + 1}/{playlist.length}
+        {current?.title} • {idx + 1}/{ordered.length}
       </div>
     </div>
   );
