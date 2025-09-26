@@ -12,6 +12,7 @@ type Submission = {
   file_path?: string | null;
   status?: string | null;
   event_id?: number | null;
+  order_index?: number | null;   // added
 };
 
 type EventRow = {
@@ -110,13 +111,15 @@ export default async function ScreenPage({ params }: PageProps) {
     );
   }
 
-  // Fetch only approved submissions, no storage_bucket column
+  // Fetch approved submissions in Admin play order: 1, 2, 3, ...
   const { data: subs, error: subErr } = await sb
     .from("submissions")
-    .select("id, title, file_path, status, created_at")
+    .select("id, title, file_path, status, created_at, order_index") // added order_index
     .eq("event_id", evData.id)
     .eq("status", "approved")
-    .order("created_at", { ascending: true });
+    .order("order_index", { ascending: true, nullsFirst: false })   // key line
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
 
   if (subErr) {
     return (
@@ -138,7 +141,6 @@ export default async function ScreenPage({ params }: PageProps) {
   // Prepare signed URLs with bucket default and key normalization
   const { data: bucketList } = await sb.storage.listBuckets();
   const bucketNames = new Set((bucketList || []).map((b) => b.name));
-  // Prefer a bucket named "submissions", else first available
   const defaultBucket =
     (bucketNames.has("submissions") ? "submissions" : bucketList?.[0]?.name) || "";
 
@@ -155,7 +157,6 @@ export default async function ScreenPage({ params }: PageProps) {
       } else if (!bucket) {
         reason = "no bucket available";
       } else {
-        // If key accidentally includes the bucket name, strip it
         const pref = `${bucket}/`;
         if (key.startsWith(pref)) key = key.slice(pref.length);
         key = key.replace(/^\/+/, "");
@@ -178,11 +179,12 @@ export default async function ScreenPage({ params }: PageProps) {
         src: fileUrl,
         type,
         reason,
-        meta: { status: s.status, bucket, file_path: s.file_path || "", key },
+        meta: { status: s.status, bucket, file_path: s.file_path || "", key, order_index: s.order_index ?? null },
       };
     })
   );
 
+  // Keep original order from the query (already 1,2,3,...)
   const playable = playlistRaw.filter(p => p.src && p.type === "video");
   const skipped = playlistRaw.filter(p => !p.src || p.type !== "video");
 
@@ -218,6 +220,7 @@ export default async function ScreenPage({ params }: PageProps) {
                       <div>Reason: {s.reason || "unknown"}</div>
                       <div>Bucket: {s.meta.bucket || "?"}</div>
                       <div>Path: {s.meta.file_path}</div>
+                      <div>Order: {String(s.meta.order_index ?? "")}</div>
                       <div>Key used: {s.meta.key}</div>
                     </li>
                   ))}
