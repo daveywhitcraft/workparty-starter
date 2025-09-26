@@ -91,7 +91,6 @@ export default function Player({
     <div style={{ width: "100vw", height: "100vh", background: "black" }}>
       <video
         ref={videoRef}
-        key={src}
         src={src}
         controls={true}
         muted={muted}
