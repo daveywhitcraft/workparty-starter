@@ -79,13 +79,38 @@ export default function Player({
     else if (loopAll) setIdx(0);
   };
 
+  // >>> BUFFERING HACK – comment out this entire function body to disable <<<
   const handleLoadedData = async () => {
     const el = videoRef.current;
     if (!el) return;
+
+    const waitForBuffer = () =>
+      new Promise<void>((resolve) => {
+        const check = () => {
+          if (el.buffered.length > 0) {
+            const bufferedEnd = el.buffered.end(0);
+            const bufferLength = bufferedEnd - el.currentTime;
+            console.log(`Buffered ${bufferLength.toFixed(1)}s`);
+            if (bufferLength > 15) {
+              // wait until 15s are buffered
+              resolve();
+              return;
+            }
+          }
+          setTimeout(check, 500);
+        };
+        check();
+      });
+
+    try {
+      await waitForBuffer();
+    } catch {}
+
     try {
       if (autoPlay) await el.play();
     } catch {}
   };
+  // <<< END BUFFERING HACK >>>
 
   return (
     <div style={{ width: "100vw", height: "100vh", background: "black" }}>
@@ -106,8 +131,18 @@ export default function Player({
           background: "black",
         }}
       />
+
+      {/* >>> NEXT VIDEO PRELOAD HACK – comment out to disable <<< */}
+      {items.length > 1 && (
+        <video
+          src={buildUrl(items[(idx + 1) % items.length].path)}
+          preload="auto"
+          muted
+          playsInline
+          style={{ display: "none" }} // invisible preload
+        />
+      )}
+      {/* <<< END NEXT VIDEO PRELOAD HACK >>> */}
     </div>
   );
 }
-
-
