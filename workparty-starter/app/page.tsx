@@ -26,7 +26,7 @@ export default function Page() {
               letterSpacing: "-0.02em",
             }}
           >
-          {/*   NEXT WORK.PARTY
+            NEXT WORK.PARTY
           </div>
 
           <div
