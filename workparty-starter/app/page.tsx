@@ -25,7 +25,7 @@ export default function Page() {
               fontWeight: 800,
               letterSpacing: "-0.02em",
             }}
-          >
+          {/* >
             NEXT WORK.PARTY
           </div>
 
