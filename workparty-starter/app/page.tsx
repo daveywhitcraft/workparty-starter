@@ -36,7 +36,7 @@ export default function Page() {
               lineHeight: 1.15,
             }}
           >
-            16/11/2025&nbsp;&nbsp;20:00-? <br />
+            16/11/2025&nbsp;&nbsp;19:00-21:00 <br />
             Schererstraße 10, 13347 Berlin <br />
             Submissions open on 11/11/2025 15h CEST!
           </div>
