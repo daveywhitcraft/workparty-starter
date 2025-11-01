@@ -46,7 +46,7 @@ export default function Page() {
             style={{
               display: "inline-block",
               marginTop: "2.5rem",
-              fontSize: "clamp(28px, 6.5vw, 110px)",
+              fontSize: "clamp(22px, 6vw, 90px)",
               textDecoration: "underline",
             }}
           >
