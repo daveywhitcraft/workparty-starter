@@ -39,11 +39,11 @@ export default function RootLayout({
             </a>
 
             <div style={{ display: "flex", alignItems: "center" }}>
-             {/*
+             
              <a href="/submit" className="underline" style={{ marginLeft: 24 }}>
                 Submit
               </a>
-              */}
+              
               <a href="/archive" className="underline" style={{ marginLeft: 24 }}>
                 Archive
               </a>
