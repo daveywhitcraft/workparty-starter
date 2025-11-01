@@ -40,7 +40,7 @@ export default function Page() {
             Schererstraße 10, 13347 Berlin <br />
             Submissions Open!
           </div>
- {
+ 
           <a
             href="/submit"
             style={{
@@ -52,7 +52,7 @@ export default function Page() {
           >
             SUBMIT NOW
           </a>
-          */}
+        
         </div>
       </div>
 
