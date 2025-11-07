@@ -37,7 +37,7 @@ export default function Page() {
             }}
           >
             16/11/2025&nbsp;&nbsp;19:00-21:00 <br />
-            Schererstraße 10, 13347 Berlin <br />
+            Ackerstraße 18,  Berlin <br />
           </div>
  
           <a
