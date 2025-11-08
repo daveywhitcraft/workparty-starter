@@ -40,7 +40,7 @@ export default function Page() {
             Ackerstraße 18,  Berlin <br />
           </div>
  
-          <a
+        {/*   <a
             href="/submit"
             style={{
               display: "inline-block",
@@ -51,7 +51,7 @@ export default function Page() {
           >
             SUBMIT NOW
           </a>
-        
+        */}
         </div>
       </div>
 
