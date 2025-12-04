@@ -138,7 +138,6 @@ export default async function ArchivePage() {
                 target="_blank"
                 rel="noreferrer"
               >
-                Screen event page ↗
               </a>
             </div>
           )}
